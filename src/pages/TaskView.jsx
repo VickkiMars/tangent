@@ -3,7 +3,7 @@ import TaskBoard from '../components/TaskBoard';
 
 const TaskView = () => {
   return (
-    <div className="pt-20 px-6 h-screen overflow-hidden">
+    <div className="-mx-4 sm:-mx-6 h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-7rem)] md:h-[calc(100vh-8rem)] overflow-hidden">
       <TaskBoard />
     </div>
   );

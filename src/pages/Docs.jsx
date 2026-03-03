@@ -1,28 +1,112 @@
 import { useState } from 'react';
-import { ChevronRight, FileText, Code } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
+import Installation from '../components/docs/Installation';
+import QuickStart from '../components/docs/QuickStart';
+import Architecture from '../components/docs/Architecture';
+import Providers from '../components/docs/Providers';
+import Memory from '../components/docs/Memory';
+import Tools from '../components/docs/Tools';
+import RateLimiting from '../components/docs/RateLimiting';
 
 const Docs = () => {
-  const [activeSection, setActiveSection] = useState('getting-started');
+  const [activeSection, setActiveSection] = useState('installation');
 
   const menu = [
-    { id: 'getting-started', title: 'Getting Started', items: ['Installation', 'Quick Start', 'Architecture'] },
-    { id: 'core-concepts', title: 'Core Concepts', items: ['Agents', 'Providers', 'Memory', 'Tools'] },
-    { id: 'guides', title: 'Guides', items: ['Building a Chatbot', 'Rate Limiting', 'Deploying'] },
-    { id: 'api', title: 'API Reference', items: ['Client', 'Types', 'Errors'] },
+    { 
+      id: 'getting-started', 
+      title: 'Getting Started', 
+      items: [
+        { id: 'installation', label: 'Installation' },
+        { id: 'quick-start', label: 'Quick Start' },
+        { id: 'architecture', label: 'Architecture' }
+      ] 
+    },
+    { 
+      id: 'core-concepts', 
+      title: 'Core Concepts', 
+      items: [
+        { id: 'providers', label: 'Providers' },
+        { id: 'memory', label: 'Memory' },
+        { id: 'tools', label: 'Tools' }
+      ] 
+    },
+    { 
+      id: 'guides', 
+      title: 'Guides', 
+      items: [
+        { id: 'rate-limiting', label: 'Rate Limiting' }
+      ] 
+    },
   ];
 
+  const renderContent = () => {
+    switch (activeSection) {
+      case 'installation':
+        return <Installation />;
+      case 'quick-start':
+        return <QuickStart />;
+      case 'architecture':
+        return <Architecture />;
+      case 'providers':
+        return <Providers />;
+      case 'memory':
+        return <Memory />;
+      case 'tools':
+        return <Tools />;
+      case 'rate-limiting':
+        return <RateLimiting />;
+      default:
+        return <Installation />;
+    }
+  };
+
+  const getBreadcrumbs = () => {
+    for (const section of menu) {
+      const item = section.items.find((i) => i.id === activeSection);
+      if (item) {
+        return (
+          <>
+            {section.title} <ChevronRight size={12} /> {item.label}
+          </>
+        );
+      }
+    }
+    return null;
+  };
+
   return (
-    <div className="max-w-7xl mx-auto py-10 px-6 flex gap-12 min-h-screen">
-      {/* Sidebar */}
-      <aside className="w-64 hidden md:block sticky top-32 h-fit">
+    <div className="max-w-7xl mx-auto py-8 sm:py-10 flex flex-col md:flex-row gap-8 md:gap-12 min-h-screen">
+      {/* Mobile section picker */}
+      <div className="md:hidden">
+        <select
+          value={activeSection}
+          onChange={e => setActiveSection(e.target.value)}
+          className="w-full bg-card border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-white/30 appearance-none"
+          style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717A' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center' }}
+        >
+          {menu.map(section => (
+            <optgroup key={section.id} label={section.title}>
+              {section.items.map(item => (
+                <option key={item.id} value={item.id}>{item.label}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      {/* Desktop sidebar */}
+      <aside className="w-56 hidden md:block flex-shrink-0 sticky top-32 h-fit">
         {menu.map((section) => (
           <div key={section.id} className="mb-8">
             <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-4">{section.title}</h4>
             <ul className="space-y-2">
               {section.items.map((item) => (
-                <li key={item}>
-                  <button className="text-sm text-text-secondary hover:text-white transition-colors text-left w-full">
-                    {item}
+                <li key={item.id}>
+                  <button
+                    onClick={() => setActiveSection(item.id)}
+                    className={`text-sm transition-colors text-left w-full ${activeSection === item.id ? 'text-white font-semibold' : 'text-text-secondary hover:text-white'}`}
+                  >
+                    {item.label}
                   </button>
                 </li>
               ))}
@@ -32,38 +116,11 @@ const Docs = () => {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-grow max-w-3xl">
-        <div className="mb-4 text-white text-sm font-mono flex items-center gap-2">
-          Docs <ChevronRight size={12} /> Getting Started <ChevronRight size={12} /> Installation
+      <div className="flex-grow min-w-0 max-w-3xl">
+        <div className="mb-6 text-text-tertiary text-sm font-mono flex items-center gap-2 flex-wrap">
+          Docs <ChevronRight size={12} /> {getBreadcrumbs()}
         </div>
-        <h1 className="text-4xl font-bold text-white mb-6">Installation</h1>
-        <p className="text-text-secondary text-lg mb-8 leading-relaxed">
-          Get started with Spectrum by installing the core SDK. We support Node.js v18 and above.
-        </p>
-
-        <div className="bg-card border border-white/10 rounded-xl p-6 mb-8 relative group">
-          <div className="absolute top-4 right-4 text-xs text-text-tertiary font-mono">bash</div>
-          <code className="text-white font-mono text-sm">
-            npm install @spectrum/sdk
-          </code>
-        </div>
-
-        <h2 className="text-2xl font-bold text-white mb-4 mt-12">Configuration</h2>
-        <p className="text-text-secondary mb-6">
-          Create a <code className="bg-white/10 px-1.5 py-0.5 rounded text-white text-sm">spectrum.config.ts</code> file in your project root.
-        </p>
-
-        <div className="bg-card border border-white/10 rounded-xl p-6 mb-8 relative">
-           <div className="absolute top-4 right-4 text-xs text-text-tertiary font-mono">typescript</div>
-           <pre className="text-sm font-mono text-text-secondary overflow-x-auto">
-             <span className="text-orange">import</span> &#123; defineConfig &#125; <span className="text-orange">from</span> <span className="text-success">'@spectrum/sdk'</span>;<br/><br/>
-             <span className="text-orange">export</span> <span className="text-orange">default</span> <span className="text-blue-400">defineConfig</span>(&#123;<br/>
-             &nbsp;&nbsp;projectId: <span className="text-success">'proj_123xyz'</span>,<br/>
-             &nbsp;&nbsp;region: <span className="text-success">'us-east-1'</span>,<br/>
-             &nbsp;&nbsp;providers: &#91;<span className="text-success">'openai'</span>, <span className="text-success">'anthropic'</span>&#93;<br/>
-             &#125;);
-           </pre>
-        </div>
+        {renderContent()}
       </div>
     </div>
   );

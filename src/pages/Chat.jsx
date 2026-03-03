@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Send, Plus, CheckCircle, AlertCircle, ArrowRight,
-  PauseCircle, Terminal, Loader, Zap,
+  PauseCircle, Terminal, Loader, Zap, Menu,
 } from 'lucide-react';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ function EmptyState({ onQuickStart }) {
       </div>
       <h2 className="text-2xl font-bold text-white mb-3 tracking-tight">Deploy your first workflow</h2>
       <p className="text-[#A1A1AA] text-sm max-w-sm leading-relaxed mb-10">
-        Describe a complex objective. N-Agent will architect, spawn, and orchestrate
+        Describe a complex objective. Tangent will architect, spawn, and orchestrate
         specialist AI agents to complete it — then dissolve without a trace.
       </p>
       <div className="grid grid-cols-1 gap-3 w-full max-w-md">
@@ -206,14 +206,15 @@ function EmptyState({ onQuickStart }) {
 
 // ─── Chat (page) ──────────────────────────────────────────────────────────────
 export default function Chat() {
-  const [sessions,   setSessions]   = useState(MOCK_SESSIONS);
-  const [activeId,   setActiveId]   = useState(null);
-  const [eventMap,   setEventMap]   = useState({ mock_refund: MOCK_EVENTS });
-  const [objective,  setObjective]  = useState('');
-  const [provider,   setProvider]   = useState('openai');
-  const [model,      setModel]      = useState('gpt-4o');
-  const [submitting, setSubmitting] = useState(false);
-  const [demoMode,   setDemoMode]   = useState(false);
+  const [sessions,     setSessions]     = useState(MOCK_SESSIONS);
+  const [activeId,     setActiveId]     = useState(null);
+  const [eventMap,     setEventMap]     = useState({ mock_refund: MOCK_EVENTS });
+  const [objective,    setObjective]    = useState('');
+  const [provider,     setProvider]     = useState('openai');
+  const [model,        setModel]        = useState('gpt-4o');
+  const [submitting,   setSubmitting]   = useState(false);
+  const [demoMode,     setDemoMode]     = useState(false);
+  const [showSidebar,  setShowSidebar]  = useState(false);
 
   const wsRef       = useRef(null);
   const scrollRef   = useRef(null);
@@ -306,15 +307,29 @@ export default function Chat() {
 
   return (
     /* Escape Layout padding to get full-height split pane */
-    <div className="-mx-6 -mt-8 flex h-[calc(100vh-5.5rem)] overflow-hidden font-sans">
+    <div className="-mx-4 sm:-mx-6 -mt-4 sm:-mt-8 flex h-[calc(100dvh-4.5rem)] sm:h-[calc(100vh-5.5rem)] overflow-hidden font-sans relative">
+
+      {/* Mobile backdrop */}
+      {showSidebar && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
+          onClick={() => setShowSidebar(false)}
+        />
+      )}
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className="w-72 flex-shrink-0 flex flex-col border-r border-white/[0.06] bg-[#050505]">
+      <aside className={`
+        fixed md:relative top-0 left-0 h-full z-50 md:z-auto
+        w-[280px] sm:w-72 flex-shrink-0 flex flex-col
+        border-r border-white/[0.06] bg-[#050505]
+        transition-transform duration-300 ease-in-out
+        ${showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
         <div className="px-5 py-5 border-b border-white/[0.06]">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-[#71717A] uppercase tracking-widest">Workflows</span>
             <button
-              onClick={() => { setActiveId(null); setObjective(''); textareaRef.current?.focus(); }}
+              onClick={() => { setActiveId(null); setObjective(''); setShowSidebar(false); textareaRef.current?.focus(); }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-gray-200 text-black text-[10px] font-bold transition-colors shadow-[0_0_12px_rgba(255,255,255,0.2)]"
             >
               <Plus size={11} /> New
@@ -326,7 +341,12 @@ export default function Chat() {
         <div className="flex-grow overflow-y-auto p-3 space-y-2">
           <AnimatePresence>
             {sessions.map(s => (
-              <SessionItem key={s.id} session={s} active={activeId === s.id} onClick={() => setActiveId(s.id)} />
+              <SessionItem
+                key={s.id}
+                session={s}
+                active={activeId === s.id}
+                onClick={() => { setActiveId(s.id); setShowSidebar(false); }}
+              />
             ))}
           </AnimatePresence>
         </div>
@@ -345,11 +365,36 @@ export default function Chat() {
       </aside>
 
       {/* ── Main ────────────────────────────────────────────────────────── */}
-      <div className="flex-grow flex flex-col bg-[#000] overflow-hidden">
+      <div className="flex-grow flex flex-col bg-[#000] overflow-hidden min-w-0">
 
-        {/* Workflow header */}
+        {/* Mobile top bar — always visible on mobile */}
+        <div className="md:hidden h-12 border-b border-white/[0.06] px-4 flex items-center gap-3 bg-black/80 backdrop-blur-xl flex-shrink-0">
+          <button
+            onClick={() => setShowSidebar(true)}
+            className="p-1.5 rounded-lg hover:bg-white/10 text-[#71717A] hover:text-white transition-colors flex-shrink-0"
+            aria-label="Open workflows"
+          >
+            <Menu size={16} />
+          </button>
+          {activeSession ? (
+            <>
+              <span className="font-mono text-[10px] text-[#71717A] truncate flex-grow">{activeSession.name}</span>
+              <span
+                className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border flex-shrink-0"
+                style={{ color: statusMeta.color, borderColor: `${statusMeta.color}40`, background: `${statusMeta.color}10` }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: statusMeta.color }} />
+                {statusMeta.label}
+              </span>
+            </>
+          ) : (
+            <span className="text-[11px] text-[#71717A]">No workflow selected</span>
+          )}
+        </div>
+
+        {/* Desktop workflow header */}
         {activeSession && (
-          <div className="h-14 border-b border-white/[0.06] px-8 flex items-center gap-3 bg-black/80 backdrop-blur-xl flex-shrink-0">
+          <div className="hidden md:flex h-14 border-b border-white/[0.06] px-8 items-center gap-3 bg-black/80 backdrop-blur-xl flex-shrink-0">
             <Terminal size={13} className="text-[#71717A] flex-shrink-0" />
             <span className="font-mono text-[10px] text-[#71717A] truncate">{activeSession.id}</span>
             <span className="text-[#71717A] hidden lg:inline">·</span>
@@ -365,7 +410,7 @@ export default function Chat() {
         )}
 
         {/* Event feed */}
-        <div ref={scrollRef} className="flex-grow overflow-y-auto px-8 py-8 space-y-4">
+        <div ref={scrollRef} className="flex-grow overflow-y-auto px-4 sm:px-8 py-5 sm:py-8 space-y-4">
           {!activeId ? (
             <EmptyState onQuickStart={(q) => { setObjective(q); textareaRef.current?.focus(); }} />
           ) : activeEvents.length === 0 ? (
@@ -387,7 +432,7 @@ export default function Chat() {
         </div>
 
         {/* Objective input bar */}
-        <div className="flex-shrink-0 px-8 py-5 border-t border-white/[0.06] bg-black/80 backdrop-blur-xl">
+        <div className="flex-shrink-0 px-4 sm:px-8 py-4 sm:py-5 border-t border-white/[0.06] bg-black/80 backdrop-blur-xl">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-end gap-3 bg-[#0E0E0E] border border-white/10 rounded-[20px] px-5 py-4 focus-within:border-white/30 transition-colors shadow-lg shadow-black/30">
               <div className="flex flex-col gap-2 justify-end mb-1">
@@ -400,9 +445,9 @@ export default function Chat() {
                   }}
                   className="bg-[#1A1A1A] border border-white/10 text-[#71717A] hover:text-white text-xs rounded-lg px-2 py-1.5 outline-none transition-colors"
                 >
-                  <option value="openai:gpt-4o">GPT-4o</option>
-                  <option value="anthropic:claude-3-5-sonnet-latest">Claude 3.5</option>
-                  <option value="google:gemini-1.5-pro">Gemini 1.5</option>
+                  <option value="openai:gpt-4o">GPT-5 pro</option>
+                  <option value="anthropic:claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+                  <option value="google:gemini-3.0-flash">Gemini 3.0 Flash</option>
                 </select>
               </div>
               <textarea
@@ -411,7 +456,7 @@ export default function Chat() {
                 value={objective}
                 onChange={e => setObjective(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitObjective(); } }}
-                placeholder="Describe your objective — N-Agent will architect the workflow…"
+                placeholder="Describe your objective — Tangent will architect the workflow…"
                 className="flex-grow resize-none bg-transparent text-sm text-white placeholder-[#71717A] focus:outline-none leading-relaxed max-h-36 overflow-y-auto"
               />
               <button

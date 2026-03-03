@@ -8,7 +8,7 @@ const Workspace = () => {
   // The prompt description uses 'tkt_12345_customer_refund' as the example for the center column.
   
   return (
-    <div className="pt-20 px-6 h-screen overflow-hidden">
+    <div className="-mx-4 sm:-mx-6 h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-7rem)] md:h-[calc(100vh-8rem)] overflow-hidden">
       <TaskBoard defaultTaskId="tkt_12345_customer_refund" />
     </div>
   );

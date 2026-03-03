@@ -94,11 +94,12 @@ function Tab({ label, icon: Icon, active, onClick, badge = 0 }) {
 
 // ─── TaskBoard ────────────────────────────────────────────────────────────────
 const TaskBoard = ({ defaultTaskId = null }) => {
-  const [selectedId, setSelectedId]       = useState(defaultTaskId || 'tkt_12345_customer_refund');
-  const [inspectorData, setInspectorData] = useState(null);
-  const [filter, setFilter]               = useState('all');
-  const [centerTab, setCenterTab]         = useState('timeline'); // 'timeline' | 'graph' | 'input'
+  const [selectedId, setSelectedId]         = useState(defaultTaskId || 'tkt_12345_customer_refund');
+  const [inspectorData, setInspectorData]   = useState(null);
+  const [filter, setFilter]                 = useState('all');
+  const [centerTab, setCenterTab]           = useState('timeline'); // 'timeline' | 'graph' | 'input'
   const [humanResponses, setHumanResponses] = useState({}); // { agentId: responseText }
+  const [mobilePanel, setMobilePanel]       = useState('main'); // 'threads' | 'main' | 'inspector'
   
   // Real data state
   const [workflowState, setWorkflowState] = useState(null);
@@ -176,11 +177,35 @@ const TaskBoard = ({ defaultTaskId = null }) => {
 
   return (
     <div
-      className="h-[calc(100vh-6rem)] w-full max-w-[1920px] mx-auto grid grid-cols-12 gap-6 p-6 font-sans text-sm bg-[#000000]"
+      className="h-[calc(100dvh-5rem)] sm:h-[calc(100vh-6rem)] w-full max-w-[1920px] mx-auto grid grid-cols-12 gap-2 sm:gap-4 lg:gap-6 p-2 sm:p-4 lg:p-6 font-sans text-sm bg-[#000000]"
       style={{ color: '#A1A1AA' }}
     >
+      {/* ── Mobile panel tabs ─────────────────────────────────────────── */}
+      <div className="lg:hidden col-span-12 flex gap-1 p-1 bg-[#0E0E0E] rounded-full border border-white/[0.07] self-start">
+        {[
+          { key: 'threads',  label: 'Threads'  },
+          { key: 'main',     label: 'Board'    },
+          { key: 'inspector',label: 'Inspector', badge: inspectorData ? 1 : 0 },
+        ].map(({ key, label, badge }) => (
+          <button
+            key={key}
+            onClick={() => setMobilePanel(key)}
+            className={`relative flex-1 py-2 rounded-full text-[11px] font-bold uppercase tracking-wide transition-all duration-300 ${
+              mobilePanel === key ? 'bg-white text-black shadow-[0_0_12px_rgba(255,255,255,0.2)]' : 'text-[#71717A] hover:text-white'
+            }`}
+          >
+            {label}
+            {badge > 0 && (
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#FF8A00] text-black text-[7px] font-black flex items-center justify-center leading-none">
+                {badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       {/* ── Col 1: Thread Registry ───────────────────────────────────── */}
-      <div className="col-span-12 lg:col-span-3 xl:col-span-2 flex flex-col gap-4 h-full">
+      <div className={`col-span-12 lg:col-span-3 xl:col-span-2 gap-4 h-full ${mobilePanel === 'threads' ? 'flex' : 'hidden lg:flex'} flex-col`}>
         <div className="flex items-center justify-between px-2">
           <span className="text-[10px] font-medium text-[#71717A] tracking-widest uppercase">Threads</span>
           <button className="p-2 hover:bg-[#1A1A1A] rounded-full text-[#71717A] hover:text-white transition-colors">
@@ -231,26 +256,26 @@ const TaskBoard = ({ defaultTaskId = null }) => {
       </div>
 
       {/* ── Col 2: Centre Panel with Tabs ────────────────────────────── */}
-      <div className="col-span-12 lg:col-span-6 xl:col-span-7 flex flex-col h-full bg-[#0E0E0E] rounded-[24px] border border-white/[0.07] overflow-hidden shadow-2xl">
+      <div className={`col-span-12 lg:col-span-6 xl:col-span-7 h-full bg-[#0E0E0E] rounded-[24px] border border-white/[0.07] overflow-hidden shadow-2xl ${mobilePanel === 'main' ? 'flex' : 'hidden lg:flex'} flex-col`}>
 
         {/* Sticky header */}
-        <div className="border-b border-white/[0.07] px-6 py-3 bg-[rgba(14,14,14,0.9)] backdrop-blur-xl z-10 sticky top-0 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-sans text-base font-semibold text-white tracking-tight">
+        <div className="border-b border-white/[0.07] px-4 sm:px-6 py-3 bg-[rgba(14,14,14,0.9)] backdrop-blur-xl z-10 sticky top-0 flex flex-col gap-2 sm:gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="font-sans text-sm sm:text-base font-semibold text-white tracking-tight truncate">
                 {THREADS.find(t => t.id === selectedId)?.name || selectedId}
               </h2>
               <div className="text-[10px] text-[#71717A] flex gap-3 font-mono mt-0.5">
                 <span className="flex items-center gap-1"><Clock size={10}/> {workflowState?.status || 'No state'}</span>
-                <span className="flex items-center gap-1"><Layers size={10}/> {currentEvents.length} events</span>
+                <span className="flex items-center gap-1 hidden sm:flex"><Layers size={10}/> {currentEvents.length} events</span>
               </div>
             </div>
             {/* Filter pills (Timeline tab only) */}
             {centerTab === 'timeline' && (
-              <div className="flex items-center p-1 bg-[#1A1A1A] rounded-full border border-white/[0.05]">
+              <div className="flex items-center p-1 bg-[#1A1A1A] rounded-full border border-white/[0.05] flex-shrink-0">
                 {['all','agent','tool','system'].map(f => (
                   <button key={f} onClick={() => setFilter(f)}
-                    className={`px-3 py-1 rounded-full text-[10px] uppercase font-bold tracking-wide transition-all duration-300 ${
+                    className={`px-2 sm:px-3 py-1 rounded-full text-[9px] sm:text-[10px] uppercase font-bold tracking-wide transition-all duration-300 ${
                       filter===f ? 'bg-white text-black shadow-[0_0_12px_rgba(255,255,255,0.25)]' : 'text-[#71717A] hover:text-white'
                     }`}
                   >{f}</button>
@@ -269,10 +294,10 @@ const TaskBoard = ({ defaultTaskId = null }) => {
 
         {/* ── Timeline ──────────────────────────────────────────────── */}
         {centerTab === 'timeline' && (
-          <div className="flex-grow overflow-y-auto p-8 space-y-8 relative">
+          <div className="flex-grow overflow-y-auto p-4 sm:p-8 space-y-5 sm:space-y-8 relative">
             <div className="absolute inset-0 pointer-events-none opacity-20"
               style={{ background:'radial-gradient(circle at 50% 0%,rgba(255,255,255,0.12),transparent 70%)' }} />
-            <div className="absolute left-[52px] top-8 bottom-8 w-px bg-gradient-to-b from-transparent via-white/[0.08] to-transparent" />
+            <div className="absolute left-[36px] sm:left-[52px] top-4 sm:top-8 bottom-4 sm:bottom-8 w-px bg-gradient-to-b from-transparent via-white/[0.08] to-transparent" />
             <AnimatePresence>
               {filteredEvents.length === 0 ? (
                 <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
@@ -359,7 +384,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
       </div>
 
       {/* ── Col 3: Inspector ─────────────────────────────────────────── */}
-      <div className="col-span-12 lg:col-span-3 flex flex-col h-full">
+      <div className={`col-span-12 lg:col-span-3 h-full ${mobilePanel === 'inspector' ? 'flex' : 'hidden lg:flex'} flex-col`}>
         <div className="bg-[#0E0E0E] h-full rounded-[24px] border border-white/[0.07] overflow-hidden flex flex-col shadow-xl">
           <div className="h-12 border-b border-white/[0.05] flex items-center justify-between px-6 bg-[rgba(14,14,14,0.9)] backdrop-blur-sm">
             <span className="text-[10px] font-bold text-[#71717A] uppercase tracking-widest">Inspector</span>
@@ -466,11 +491,11 @@ const TimelineEvent = ({ evt, idx, onInspect, getEventIcon }) => {
     <motion.div
       initial={{ opacity:0, x:-16 }} animate={{ opacity:1, x:0 }}
       transition={{ delay: idx * 0.04, type:'spring', stiffness:300, damping:24 }}
-      className="relative pl-14 group"
+      className="relative pl-10 sm:pl-14 group"
     >
       <div
         onClick={onInspect}
-        className={`absolute left-[48px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-[#0E0E0E] z-10 cursor-pointer transition-all duration-300 group-hover:scale-125 ${
+        className={`absolute left-[32px] sm:left-[48px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-[#0E0E0E] z-10 cursor-pointer transition-all duration-300 group-hover:scale-125 ${
           isAgent && evt.subtype==='spawn'       ? 'bg-white shadow-[0_0_10px_#FFFFFF]' :
           isAgent && evt.subtype==='hibernate'   ? 'bg-[#FF8A00] shadow-[0_0_10px_#FF8A00]' :
           isAgent                                ? 'bg-white opacity-50' :
