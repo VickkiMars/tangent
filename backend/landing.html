@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectrum - Agent Interfaces</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        card: '#0E0E0E',
+                        cyan: '#00E5FF',
+                        blue: '#0066FF',
+                        orange: '#FF8A00',
+                        success: '#10B981',
+                        muted: '#A1A1AA',
+                        tertiary: '#71717A'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #000000;
+            color: #FFFFFF;
+        }
+
+        /* Hardware-accelerated animations */
+        .float-slow {
+            animation: float 8s ease-in-out infinite;
+            will-change: transform;
+        }
+        .float-medium {
+            animation: float 6s ease-in-out infinite reverse;
+            will-change: transform;
+        }
+        .float-fast {
+            animation: float 4s ease-in-out infinite;
+            will-change: transform;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+
+        /* Mesh Gradients & Glassmorphism */
+        .mesh-bg {
+            background: radial-gradient(circle at 50% 100%, rgba(0, 102, 255, 0.15), transparent 50%),
+                        radial-gradient(circle at 0% 0%, rgba(0, 229, 255, 0.1), transparent 40%);
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Sine Wave Animation */
+        .sine-wave {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: drawWave 4s linear infinite;
+        }
+
+        @keyframes drawWave {
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* Scroll Reveal Utility */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-cyan selection:text-black overflow-x-hidden">
+
+    <div class="fixed bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-orange/20 via-cyan/10 to-transparent pointer-events-none -z-10"></div>
+
+    <nav class="fixed top-0 w-full z-50 glass-panel border-x-0 border-t-0 border-b border-white/10 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="text-white"><path d="M12 2L2 22h20L12 2z" fill="currentColor"/></svg>
+            <span class="font-bold tracking-tight text-lg">Spectrum</span>
+        </div>
+        <div class="flex items-center gap-2 bg-[#1A1A1A] px-3 py-1.5 rounded-full border border-white/10">
+            <div class="w-2 h-2 rounded-full bg-success animate-pulse shadow-[0_0_8px_#10B981]"></div>
+            <span class="text-xs font-medium text-success uppercase tracking-widest">All Systems Operational</span>
+        </div>
+    </nav>
+
+    <main class="relative pt-40 pb-20 px-6 max-w-7xl mx-auto flex flex-col items-center text-center">
+        
+        <div class="absolute inset-0 pointer-events-none overflow-hidden -z-10 mesh-bg">
+            <div class="absolute top-1/4 left-1/4 w-16 h-16 rounded-full float-slow shadow-[inset_-10px_-10px_20px_rgba(0,0,0,0.5)] bg-gradient-to-br from-[#25D366] to-[#128C7E] flex items-center justify-center border border-white/20">
+                <svg width="24" height="24" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12c0 2.17.7 4.19 1.94 5.86L3 22l4.27-1.07A9.97 9.97 0 0012 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18c-1.66 0-3.2-.42-4.54-1.14l-.32-.18-2.67.67.71-2.56-.2-.33A7.95 7.95 0 014 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8z"/></svg>
+            </div>
+            <div class="absolute top-1/3 right-1/4 w-20 h-20 rounded-full float-medium shadow-[inset_-10px_-10px_20px_rgba(0,0,0,0.5)] bg-gradient-to-br from-[#5865F2] to-[#404EED] flex items-center justify-center border border-white/20 blur-[1px]">
+                <svg width="32" height="32" fill="white" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+            </div>
+            <div class="absolute top-2/3 left-1/3 w-12 h-12 rounded-full float-fast shadow-[inset_-5px_-5px_15px_rgba(0,0,0,0.5)] bg-gradient-to-br from-gray-800 to-black flex items-center justify-center border border-white/20 blur-[2px]">
+                <svg width="16" height="16" fill="white" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            </div>
+        </div>
+
+        <h1 class="reveal text-5xl md:text-7xl font-bold tracking-tight leading-tight max-w-4xl z-10 drop-shadow-2xl">
+            Bring agents to the interfaces <br/> millions already use.
+        </h1>
+        <p class="reveal text-muted text-lg md:text-xl max-w-2xl mt-6 z-10 leading-relaxed font-sans">
+            Spectrum is an open-source framework that connects your agents to iMessage, Telegram, WhatsApp, X, Discord, Instagram, and other interfaces people use every day.
+        </p>
+        
+        <div class="reveal mt-10 flex flex-col sm:flex-row gap-4 z-10">
+            <button class="group bg-cyan text-black px-8 py-4 rounded-full font-semibold flex items-center justify-center gap-2 hover:scale-105 transition-all duration-300 shadow-[0_0_20px_rgba(0,229,255,0.3)] hover:shadow-[0_0_30px_rgba(0,229,255,0.5)]">
+                Start Building
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="group-hover:-translate-y-1 group-hover:translate-x-1 transition-transform"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+            <button class="bg-transparent border border-white/20 text-white px-8 py-4 rounded-full font-medium hover:bg-white/5 transition-colors duration-300">
+                Talk to an Expert
+            </button>
+        </div>
+    </main>
+
+    <section class="max-w-7xl mx-auto px-6 py-20">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+            
+            <div class="reveal md:col-span-8 bg-card rounded-[24px] border border-white/10 p-8 relative overflow-hidden group">
+                <div class="absolute inset-0 bg-gradient-to-br from-blue/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                <h2 class="text-2xl font-semibold tracking-tight text-white relative z-10">Low latency. High reliability.</h2>
+                <p class="text-muted mt-2 mb-10 max-w-md relative z-10">Under 1s delivery on Photon's edge network with 99.9% uptime.</p>
+                
+                <div class="relative h-64 w-full rounded-2xl bg-black/50 border border-white/5 flex items-center justify-center overflow-hidden">
+                    <div class="absolute inset-0 bg-gradient-to-r from-blue/20 via-cyan/20 to-orange/20 opacity-30 blur-2xl"></div>
+                    <svg class="w-full h-32 relative z-0" viewBox="0 0 1000 100" preserveAspectRatio="none">
+                        <path class="sine-wave" d="M0,50 Q50,0 100,50 T200,50 T300,50 T400,50 T500,50 T600,50 T700,50 T800,50 T900,50 T1000,50" fill="none" stroke="#10B981" stroke-width="3" />
+                    </svg>
+                    <div class="absolute glass-panel px-6 py-2 rounded-full text-white font-medium shadow-2xl z-10 border-white/20">
+                        &lt;100ms
+                    </div>
+                </div>
+            </div>
+
+            <div class="reveal md:col-span-4 bg-card rounded-[24px] border border-white/10 p-8 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-2xl font-semibold tracking-tight text-white">Observability</h2>
+                    <p class="text-muted mt-2 text-sm">A complete audit for every message.</p>
+                </div>
+                <div class="mt-8 space-y-4">
+                    <div class="glass-panel p-4 rounded-xl">
+                        <p class="text-xs text-tertiary uppercase tracking-widest font-medium mb-1">Total Messages</p>
+                        <p class="text-3xl font-mono text-white">128,432</p>
+                    </div>
+                    <div class="glass-panel p-4 rounded-xl flex justify-between items-center">
+                        <div>
+                            <p class="text-xs text-tertiary uppercase tracking-widest font-medium mb-1">Active Agents</p>
+                            <p class="text-xl font-mono text-white">14</p>
+                        </div>
+                        <div class="h-8 w-8 rounded-full border border-success/30 flex items-center justify-center bg-success/10">
+                            <div class="h-3 w-3 bg-success rounded-full animate-pulse"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="reveal md:col-span-6 bg-card rounded-[24px] border border-white/10 p-8 relative overflow-hidden">
+                <h2 class="text-2xl font-semibold tracking-tight text-white">Unified API</h2>
+                <p class="text-muted mt-2 mb-6 text-sm">Simple, powerful, with excellent ergonomics.</p>
+                
+                <div class="bg-[#050505] rounded-xl p-6 font-mono text-sm leading-relaxed overflow-x-auto border border-white/5 shadow-inner relative">
+                    <div class="absolute top-0 right-0 p-3 opacity-50"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg></div>
+                    <span class="text-cyan">const</span> spectrum = <span class="text-[#FFB800]">Spectrum</span>(providers: [...]);<br>
+                    <span class="text-cyan">const</span> agent = <span class="text-cyan">new</span> <span class="text-[#FFB800]">Agent</span>();<br><br>
+                    <span class="text-tertiary">// Handle incoming messages</span><br>
+                    spectrum.<span class="text-white">onMessage</span>(<span class="text-cyan">async</span> ({ space, message }) => {<br>
+                    &nbsp;&nbsp;<span class="text-cyan">if</span> (message.type === <span class="text-[#10B981]">'text'</span>) {<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="text-cyan">const</span> res = <span class="text-cyan">await</span> agent.<span class="text-white">generate</span>(message);<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;<span class="text-cyan">await</span> space.<span class="text-white">send</span>(res);<br>
+                    &nbsp;&nbsp;}<br>
+                    });
+                </div>
+            </div>
+
+            <div class="reveal md:col-span-6 bg-card rounded-[24px] border border-white/10 p-8 flex flex-col justify-between overflow-hidden relative">
+                <div class="absolute inset-0 bg-gradient-to-bl from-orange/10 via-transparent to-transparent"></div>
+                <div class="relative z-10">
+                    <h2 class="text-2xl font-semibold tracking-tight text-white">Scale from 1 to millions</h2>
+                    <p class="text-muted mt-2 text-sm">Zero configuration scale across platform limits.</p>
+                </div>
+                
+                <div class="relative h-48 mt-8 flex items-center justify-center z-10">
+                    <div class="absolute w-32 h-32 bg-orange/20 rounded-full blur-3xl"></div>
+                    <div class="flex -space-x-4">
+                        <div class="w-16 h-16 rounded-full border-2 border-black bg-gradient-to-tr from-gray-700 to-gray-500 shadow-xl flex items-center justify-center text-xl">👤</div>
+                        <div class="w-16 h-16 rounded-full border-2 border-black bg-gradient-to-tr from-cyan/50 to-blue/50 shadow-xl flex items-center justify-center text-xl z-10 -translate-y-4">🧑‍💻</div>
+                        <div class="w-16 h-16 rounded-full border-2 border-black bg-gradient-to-tr from-orange/50 to-red/50 shadow-xl flex items-center justify-center text-xl">👩‍🚀</div>
+                    </div>
+                    <div class="absolute bottom-0 right-0 glass-panel px-4 py-2 rounded-full text-xs font-mono text-white flex items-center gap-2">
+                        <div class="h-2 w-2 bg-success rounded-full"></div> Rendering adaptive format
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <section class="reveal border-t border-white/5 py-16 text-center">
+        <p class="text-tertiary text-sm font-medium uppercase tracking-widest mb-8">Trusted by the world's best agent teams</p>
+        <div class="flex flex-wrap justify-center items-center gap-12 opacity-50 grayscale hover:grayscale-0 transition-all duration-500 px-6">
+            <span class="text-xl font-bold text-white flex items-center gap-2"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M11.4 24l-8.76-8.76V6.48L11.4 15.24v8.76zm1.2-8.76l8.76-8.76V24l-8.76-8.76v-8.76zM11.4 0v8.76L2.64 17.52V8.76L11.4 0zm1.2 8.76V0l8.76 8.76v8.76l-8.76-8.76z"/></svg> Microsoft</span>
+            <span class="text-xl font-bold text-white font-serif tracking-tight">OpenAI</span>
+            <span class="text-xl font-bold text-white flex items-center gap-2"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12c0-5.523-4.477-10-10-10z"/></svg> Meta</span>
+            <span class="text-xl font-bold text-white font-mono tracking-tighter">▲ Vercel</span>
+        </div>
+    </section>
+
+    <footer class="border-t border-white/10 py-10 px-6">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-tertiary">
+            <div class="flex items-center gap-2 text-white">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 22h20L12 2z" fill="currentColor"/></svg>
+                <span class="font-bold">Spectrum</span>
+            </div>
+            <p>© 2026 Photon All Rights Reserved.</p>
+            <div class="flex gap-4">
+                <a href="#" class="hover:text-white transition-colors">X</a>
+                <a href="#" class="hover:text-white transition-colors">Discord</a>
+                <a href="#" class="hover:text-white transition-colors">GitHub</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const observerOptions = {
+                root: null,
+                rootMargin: '0px',
+                threshold: 0.1
+            };
+
+            const observer = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                        // Unobserve after animating once for performance
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll('.reveal').forEach((el) => {
+                observer.observe(el);
+            });
+        });
+    </script>
+</body>
+</html>

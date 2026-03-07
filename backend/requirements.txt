@@ -1,0 +1,15 @@
+openai
+pydantic
+redis
+langchain-core
+composio-openai
+fastapi
+uvicornstructlog
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-exporter-otlp
+pytest
+pytest-asyncio
+pytest-mock
+litellm
