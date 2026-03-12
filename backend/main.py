@@ -358,7 +358,7 @@ async def get_workflow(session_id: str, user: dict = Depends(get_current_user)):
 
     # Filter blackboard history to only include messages belonging to this workflow's
     # tasks, not the global history of all workflows (Bug 15).
-    task_ids = {t.task_id for t in state.tasks} if state.tasks else None
+    task_ids = {t.task_id for t in state.tasks} if state.tasks else set()
     history = await blackboard.get_thread_history(thread_ids=task_ids)
 
     from db import get_workflow_analytics
@@ -473,10 +473,10 @@ async def websocket_endpoint(
 
                 # Reload state to pick up tasks that may have been added after connection (Bug 12).
                 current_state = await state_manager.load_state(session_id)
-                task_ids = {t.task_id for t in current_state.tasks} if current_state and current_state.tasks else None
+                task_ids = {t.task_id for t in current_state.tasks} if current_state and current_state.tasks else set()
 
                 # Only forward events that belong to this session's tasks.
-                if task_ids is None or message.thread_id in task_ids:
+                if message.thread_id in task_ids:
                     await websocket.send_json(message.model_dump())
 
             except asyncio.TimeoutError:
