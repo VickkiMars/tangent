@@ -12,15 +12,18 @@ try:
 except ImportError:
     litellm = None
 
-# Rate Limiter for Gemini (15 requests per minute)
+# Rate Limiter & Queue Manager for Global LLM Throttling
 class RateLimiter:
-    def __init__(self, calls_per_minute: int):
+    def __init__(self, calls_per_minute: int, max_concurrent: int):
         self.period = 60.0
         self.max_calls = calls_per_minute
         self.timestamps = []
         self._lock = asyncio.Lock()
+        self._semaphore = asyncio.Semaphore(max_concurrent)
 
     async def wait(self):
+        """Block until both concurrent slot and token bucket are available."""
+        await self._semaphore.acquire()
         async with self._lock:
             now = time.time()
             # Filter out timestamps older than the period
@@ -38,8 +41,16 @@ class RateLimiter:
 
             self.timestamps.append(time.time())
 
-# Singleton instance for Gemini Rate Limiting
-gemini_limiter = RateLimiter(calls_per_minute=15)
+    def release(self):
+        self._semaphore.release()
+
+# Global Provider Queues
+provider_limiters = {
+    "gemini": RateLimiter(calls_per_minute=15, max_concurrent=2),
+    "openai": RateLimiter(calls_per_minute=500, max_concurrent=10),
+    "anthropic": RateLimiter(calls_per_minute=50, max_concurrent=5)
+}
+default_limiter = RateLimiter(calls_per_minute=60, max_concurrent=5)
 
 class LLMProvider(ABC):
     """
@@ -76,8 +87,16 @@ class LiteLLMProvider(LLMProvider):
     def __init__(self, model: str = "gpt-4-turbo", api_key: Optional[str] = None):
         self.model = model
         self.api_key = api_key
-        # Check if this is a Gemini model to apply rate limiting
-        self.is_gemini = "gemini" in model.lower()
+        
+        # Determine provider type for routing to correct QueueManager
+        if "gemini" in model.lower():
+            self.provider = "gemini"
+        elif "gpt" in model.lower():
+            self.provider = "openai"
+        elif "claude" in model.lower():
+            self.provider = "anthropic"
+        else:
+            self.provider = "default"
 
     async def generate(
         self, 
@@ -88,25 +107,24 @@ class LiteLLMProvider(LLMProvider):
         if not litellm:
             raise ImportError("LiteLLM is not installed. Please install it to use LiteLLMProvider.")
         
-        # Apply rate limiting for Gemini models
-        if self.is_gemini:
-            await gemini_limiter.wait()
+        limiter = provider_limiters.get(self.provider, default_limiter)
+        await limiter.wait()
 
-        # Prepare arguments, filtering out None values
-        call_args = {
-            "model": self.model,
-            "messages": messages,
-            "tools": tools,
-            **kwargs
-        }
-        
-        if self.api_key:
-            call_args["api_key"] = self.api_key
+        try:
+            call_args = {
+                "model": self.model,
+                "messages": messages,
+                "tools": tools,
+                **kwargs
+            }
             
-        # Remove keys with None values to let defaults take over
-        call_args = {k: v for k, v in call_args.items() if v is not None}
-
-        return await litellm.acompletion(**call_args)
+            if self.api_key:
+                call_args["api_key"] = self.api_key
+                
+            call_args = {k: v for k, v in call_args.items() if v is not None}
+            return await litellm.acompletion(**call_args)
+        finally:
+            limiter.release()
 
 class ColabTestProvider(LLMProvider):
     """
@@ -208,7 +226,9 @@ class LLMFactory:
         elif provider_name == "google":
             api_key = os.getenv("GEMINI_API_KEY")
                 
-            model = kwargs.get("model", "gemini/gemini-3-flash")
+            model = kwargs.get("model", "gemini-3.1-flash-lite-preview")
+            if not model.startswith("gemini/"):
+                model = f"gemini/{model}"
             return LiteLLMProvider(model=model, api_key=api_key)
             
         elif provider_name == "openai":

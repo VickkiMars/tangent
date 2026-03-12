@@ -28,6 +28,16 @@ export const getWorkflowState = async (sessionId) => {
   return response.json();
 };
 
+export const getCostsSummary = async () => {
+  const response = await fetch(`${API_BASE}/analytics/costs/summary`, {
+    headers: {
+      "X-API-Key": BACKEND_ACCESS_TOKEN,
+    },
+  });
+  if (!response.ok) throw new Error("Failed to fetch costs summary");
+  return response.json();
+};
+
 export const connectToWorkflowEvents = (sessionId, onMessage, onError) => {
   const ws = new WebSocket(`${WS_BASE}/workflows/${sessionId}/events?api_key=${BACKEND_ACCESS_TOKEN}`);
   

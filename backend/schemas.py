@@ -29,10 +29,7 @@ class SynthesisManifest(BaseModel):
     session_id: str
     blueprints: List[AgentBlueprint] = Field(description="The exact list of agents being JIT compiled")
 
-class ComplexityEvaluation(BaseModel):
-    requires_swarm: bool = Field(description="True if the objective requires multiple agents, steps, or parallelization. False if a single LLM call is sufficient.")
-    reasoning: str = Field(description="Brief explanation of why a swarm is or isn't needed.")
-    direct_response: Optional[str] = Field(default=None, description="If requires_swarm is False, provide the direct answer or resolution to the objective here.")
+
 
 # 3. Blackboard Communication
 class MessagePayload(BaseModel):
@@ -45,6 +42,7 @@ class MessagePayload(BaseModel):
 
 class A2AMessage(BaseModel):
     message_id: str
+    tenant_id: str = "tenant_1"
     thread_id: str = Field(description="Ties messages to a specific SubTask lifecycle")
     sender_id: str = Field(description="The agent_id of the ephemeral agent, or 'meta_agent'")
     receiver_id: str = Field(description="Target agent_id, or 'blackboard' for broadcast")
@@ -57,8 +55,10 @@ class A2AMessage(BaseModel):
 # 4. Global State
 class WorkflowState(BaseModel):
     session_id: str
+    tenant_id: str = "tenant_1"
     original_objective: str
     tasks: List[SubTask]
     manifest: Optional[SynthesisManifest] = None
     shared_memory: Dict[str, Any] = Field(default_factory=dict, description="Context shared via the blackboard")
     status: Literal["analyzing", "architecting", "executing", "completed", "failed"] = "analyzing"
+    timestamp: float = 0.0

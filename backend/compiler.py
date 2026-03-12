@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 import inspect
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any, Callable, Optional
 import structlog
 import litellm
 
@@ -40,7 +40,22 @@ class JITCompiler:
                 if message.thread_id in blueprint_lookup:
                     target_task = task_lookup[message.thread_id]
                     blueprint = blueprint_lookup[message.thread_id]
-                    asyncio.create_task(self._spawn_ephemeral_agent(blueprint, target_task))
+                    
+                    # 1. Fetch persistent state
+                    agent_state = await self.blackboard.get_agent_state(message.thread_id)
+                    
+                    initial_context = None
+                    if agent_state:
+                        initial_context = {
+                            "conversation_history": agent_state.get("conversation_history", []),
+                            "collected_context": agent_state.get("collected_context", {}),
+                            "human_input_response": message.payload.natural_language
+                        }
+                    
+                    logger.info("resuming_hibernated_agent", task_id=message.thread_id, has_state=bool(initial_context))
+                    
+                    # 2. Respawn agent, injecting the restored context
+                    asyncio.create_task(self._spawn_ephemeral_agent(blueprint, target_task, initial_context=initial_context))
         except asyncio.CancelledError:
             self.blackboard.unsubscribe("unblock_agent", queue)
 
@@ -153,13 +168,13 @@ class JITCompiler:
                     logger.error("daemon_crashed", agent_id=agent_id, error=str(e))
                     await asyncio.sleep(5) # Supervisor backoff before restart
 
-    async def _spawn_ephemeral_agent(self, blueprint: AgentBlueprint, task: SubTask):
+    async def _spawn_ephemeral_agent(self, blueprint: AgentBlueprint, task: SubTask, initial_context: Optional[Dict] = None):
         """The isolated lifecycle of a single JIT Agent."""
         with tracer.start_as_current_span(f"agent_lifecycle_{blueprint.agent_id}") as span:
             agent_id = blueprint.agent_id
             span.set_attribute("agent_id", agent_id)
             span.set_attribute("task_id", task.task_id)
-            logger.info("agent_spawned", agent_id=agent_id, task_id=task.task_id)
+            logger.info("agent_spawned", agent_id=agent_id, task_id=task.task_id, is_resume=bool(initial_context))
             
             # 1. DEPENDENCY RESOLUTION (WAIT & HYDRATE)
             context_payloads = []
@@ -195,69 +210,92 @@ class JITCompiler:
                     context_payloads.append(f"Result from {dep_id}:\n{message.payload.natural_language}")
 
             compiled_context = "\n\n".join(context_payloads)
+            
+            if initial_context and "collected_context" in initial_context:
+                compiled_context += f"\n\nPreviously Collected Context:\n{json.dumps(initial_context['collected_context'])}"
+            
             execution_prompt = f"Objective: {task.description}\n\nUpstream Context:\n{compiled_context}\n\nTermination Condition: {blueprint.termination_condition}"
 
             # 2. BIND EXECUTION CONTEXT (IoC)
             bound_tools = self.registry.get_ephemeral_toolkit(blueprint.injected_tools)
             llm_tool_schemas = self.registry.get_ephemeral_schemas(blueprint.injected_tools)
 
-            # Inject standard "hibernate" tool
+            # Inject request_human_input tool
             llm_tool_schemas.append({
                 "type": "function",
                 "function": {
                     "name": "request_human_input",
-                    "description": "Call this tool when you need explicit human feedback, approval, or input to proceed. It will hibernate the agent.",
+                    "description": "Call this tool when you need explicit human feedback, approval, or input to proceed. It will hibernate the agent instantly and save your context.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "reason": {"type": "string", "description": "The exact question or input needed from the human."}
+                            "reason": {"type": "string", "description": "Why human input is needed (e.g., 'approval', 'clarification')."},
+                            "request_message": {"type": "string", "description": "The exact question or prompt to show the human."},
+                            "expected_response_type": {"type": "string", "enum": ["boolean", "text", "multiple_choice"], "description": "The format of response you expect."}
                         },
-                        "required": ["reason"]
-                    }
-                }
-            })
-            
-            # Inject publish_intermediate_state
-            llm_tool_schemas.append({
-                "type": "function",
-                "function": {
-                    "name": "publish_intermediate_state",
-                    "description": "Publish an intermediate state (e.g. propose, critique) without terminating. Useful for multi-turn debates or cyclic workflows.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "receiver_id": {"type": "string", "description": "The task_id to send this to, or 'blackboard' for broadcast."},
-                            "performative": {"type": "string", "description": "Type of message: 'propose', 'critique', 'inform', etc."},
-                            "content": {"type": "string", "description": "The intermediate reasoning or data."}
-                        },
-                        "required": ["receiver_id", "performative", "content"]
-                    }
-                }
-            })
-            
-            # Inject spawn_subtask
-            llm_tool_schemas.append({
-                "type": "function",
-                "function": {
-                    "name": "spawn_subtask",
-                    "description": "Dynamically spawn a new agent to handle a specific subtask at runtime.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "description": {"type": "string", "description": "Clear description of the new task."},
-                            "tools_needed": {"type": "array", "items": {"type": "string"}, "description": "List of tool names required."}
-                        },
-                        "required": ["description", "tools_needed"]
+                        "required": ["reason", "request_message", "expected_response_type"]
                     }
                 }
             })
 
-            messages = [
-                {"role": "system", "content": blueprint.persona_prompt},
-                {"role": "user", "content": execution_prompt}
-            ]
+            # Inject discover_system_tools tool
+            llm_tool_schemas.append({
+                "type": "function",
+                "function": {
+                    "name": "discover_system_tools",
+                    "description": "Look up all other available system tools registered in the backend that you do not currently have access to.",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            })
+
+            messages = []
+            if initial_context and "conversation_history" in initial_context:
+                # Agent is resuming: Hydrate previous messages
+                for msg in initial_context["conversation_history"]:
+                    messages.append(msg)
+                
+                # Append the new human response
+                if "human_input_response" in initial_context:
+                    messages.append({
+                        "role": "system",
+                        "content": f"Human has responded: {initial_context['human_input_response']}. Continue processing."
+                    })
+            else:
+                # Fresh start
+                messages = [
+                    {"role": "system", "content": blueprint.persona_prompt},
+                    {"role": "user", "content": execution_prompt}
+                ]
 
             # 3. SECURE EXECUTION ROUTER (LLM LOOP)
+            import time
+            from db import check_budget_exceeded, record_agent_analytics
+            import asyncio
+            from litellm import completion_cost
+            
+            start_time = time.time()
+            prompt_tokens = 0
+            completion_tokens = 0
+            total_cost = 0.0
+            tools_used = []
+            
+            # Pre-flight budget check
+            if await asyncio.to_thread(check_budget_exceeded, "dev_user", 0.0):
+                logger.warning("budget_exceeded", user="dev_user", agent_id=agent_id)
+                final_response_text = "ERROR: User budget exceeded. Execution paused."
+                messages.append({"role": "assistant", "content": final_response_text})
+                failure_message = A2AMessage(
+                    message_id=f"msg_{agent_id}_{int(time.time())}",
+                    thread_id=task.task_id,
+                    sender_id=agent_id,
+                    receiver_id=task.task_id,
+                    performative="failure",
+                    payload=MessagePayload(natural_language=final_response_text),
+                    timestamp=time.time()
+                )
+                await self.blackboard.publish(failure_message)
+                return
+                
             final_response_text = ""
             max_retries = 3
             retry_count = 0
@@ -277,94 +315,95 @@ class JITCompiler:
                         kwargs["tools"] = llm_tool_schemas
 
                     llm_response = await llm_provider.generate(**kwargs)
+                    
+                    # Accumulate Cost
+                    try:
+                        cost = completion_cost(completion_response=llm_response)
+                        total_cost += cost
+                        prompt_tokens += getattr(llm_response.usage, 'prompt_tokens', 0)
+                        completion_tokens += getattr(llm_response.usage, 'completion_tokens', 0)
+                        
+                        # Check budget mid-flight
+                        if await asyncio.to_thread(check_budget_exceeded, "dev_user", cost):
+                            logger.warning("budget_exceeded_mid_flight", user="dev_user", agent_id=agent_id)
+                            final_response_text = "ERROR: User budget exceeded during execution."
+                            break
+                    except Exception as e:
+                        logger.error("cost_calculation_failed", error=str(e))
+                        
                     response_message = llm_response.choices[0].message
                     messages.append(response_message)
 
                     if response_message.tool_calls:
                         for call in response_message.tool_calls:
                             func_name = call.function.name
+                            tools_used.append(func_name)
 
-                            # Handle Hibernation
+                            # Handle System Tools
+                            if func_name == "discover_system_tools":
+                                all_tools = list(self.registry._registry.keys())
+                                result_str = f"Available system tools: {all_tools}. To request access to a tool, use `request_human_input`."
+                                messages.append({"role": "tool", "tool_call_id": call.id, "name": func_name, "content": result_str})
+                                continue
+
+                            # Handle Hibernation (Human-in-the-Loop)
                             if func_name == "request_human_input":
                                 try:
                                     func_args = json.loads(call.function.arguments)
                                     reason = func_args.get("reason", "Human input required.")
+                                    request_message = func_args.get("request_message", "Please provide input.")
+                                    expected_type = func_args.get("expected_response_type", "text")
                                 except Exception:
                                     reason = "Human input required."
+                                    request_message = "Please provide input."
+                                    expected_type = "text"
+                                
+                                # Prepare serialized history to save
+                                def serialize_message(m):
+                                    if hasattr(m, 'model_dump'):
+                                        return m.model_dump()
+                                    if hasattr(m, '__dict__'):
+                                        return m.__dict__
+                                    return m
+
+                                safe_messages = [serialize_message(m) for m in messages]
+
+                                agent_state = {
+                                    "thread_id": task.task_id,
+                                    "original_agent_blueprint": blueprint.model_dump(),
+                                    "conversation_history": safe_messages,
+                                    "collected_context": {"latest_tool_calls": len(safe_messages)},
+                                    "human_input_request": {
+                                        "timestamp": int(time.time()),
+                                        "reason": reason,
+                                        "request_message": request_message,
+                                        "expected_response_type": expected_type
+                                    }
+                                }
+                                
+                                await self.blackboard.save_agent_state(task.task_id, agent_state)
 
                                 hibernate_msg = A2AMessage(
                                     message_id=f"msg_{agent_id}_{int(time.time())}",
                                     thread_id=task.task_id,
                                     sender_id=agent_id,
-                                    receiver_id=task.task_id,
+                                    receiver_id="human_interface",
                                     performative="hibernate",
-                                    payload=MessagePayload(natural_language=reason),
+                                    payload=MessagePayload(
+                                        natural_language=reason,
+                                        structured_data={
+                                            "type": "human_input_required",
+                                            "reason": reason,
+                                            "message": request_message,
+                                            "response_type": expected_type,
+                                            "state_key": f"human_input:{task.task_id}"
+                                        }
+                                    ),
                                     timestamp=time.time()
                                 )
                                 logger.info("agent_hibernate", agent_id=agent_id, task_id=task.task_id, reason=reason)
                                 await self.blackboard.publish(hibernate_msg)
-                                return # Self-destruct and wait for unblock
-
-                            if func_name == "publish_intermediate_state":
-                                try:
-                                    func_args = json.loads(call.function.arguments)
-                                    receiver_id = func_args.get("receiver_id", "blackboard")
-                                    performative = func_args.get("performative", "inform")
-                                    content = func_args.get("content", "")
-                                    msg = A2AMessage(
-                                        message_id=f"msg_{agent_id}_{int(time.time())}",
-                                        thread_id=task.task_id,
-                                        sender_id=agent_id,
-                                        receiver_id=receiver_id,
-                                        performative=performative,
-                                        payload=MessagePayload(natural_language=content),
-                                        timestamp=time.time()
-                                    )
-                                    await self.blackboard.publish(msg)
-                                    result_str = "Intermediate state published successfully."
-                                except Exception as e:
-                                    result_str = f"Failed to publish intermediate state: {e}"
-                                messages.append({"role": "tool", "tool_call_id": call.id, "name": func_name, "content": result_str})
-                                continue
-
-                            if func_name == "spawn_subtask":
-                                try:
-                                    func_args = json.loads(call.function.arguments)
-                                    description = func_args.get("description", "Dynamic task")
-                                    tools_needed = func_args.get("tools_needed", [])
-                                    new_task_id = f"dynamic_task_{int(time.time())}"
-                                    new_task = SubTask(
-                                        task_id=new_task_id,
-                                        description=description,
-                                        required_capabilities=tools_needed,
-                                        dependencies=[],
-                                        provider=getattr(blueprint, "provider", "openai"),
-                                        model=getattr(blueprint, "model", "gpt-4o")
-                                    )
-                                    new_blueprint = AgentBlueprint(
-                                        agent_id=f"agent_{new_task_id}",
-                                        target_task_id=new_task_id,
-                                        agent_type="ephemeral",
-                                        persona_prompt="You are a dynamically spawned sub-agent.",
-                                        injected_tools=tools_needed,
-                                        termination_condition="Provide the final result.",
-                                        provider=getattr(blueprint, "provider", "openai"),
-                                        model=getattr(blueprint, "model", "gpt-4o")
-                                    )
-                                    
-                                    if hasattr(self, 'manifest') and hasattr(self, 'tasks') and hasattr(self, 'task_lookup') and hasattr(self, 'agent_tasks'):
-                                        self.manifest.blueprints.append(new_blueprint)
-                                        self.tasks.append(new_task)
-                                        self.task_lookup[new_task_id] = new_task
-                                        agent_thread = asyncio.create_task(self._spawn_ephemeral_agent(new_blueprint, new_task))
-                                        self.agent_tasks.add(agent_thread)
-                                        result_str = f"Successfully spawned subtask. task_id: {new_task_id}"
-                                    else:
-                                        result_str = "Error: JITCompiler is not configured for dynamic spawning."
-                                except Exception as e:
-                                    result_str = f"Failed to spawn subtask: {e}"
-                                messages.append({"role": "tool", "tool_call_id": call.id, "name": func_name, "content": result_str})
-                                continue
+                                return # Self-destruct and wait for human response unblock
 
                             # Hardware-level security
                             if func_name not in bound_tools:
@@ -426,6 +465,14 @@ class JITCompiler:
                 timestamp=time.time()
             )
 
+            # 5. POST-PROCESSING & ANALYTICS
+            lifetime = time.time() - start_time
+            await asyncio.to_thread(
+                record_agent_analytics, 
+                task.task_id, agent_id, task.task_id, getattr(blueprint, "provider", "openai"), getattr(blueprint, "model", "gpt-4o"),
+                prompt_tokens, completion_tokens, total_cost, tools_used, True, lifetime
+            )
+
             logger.info("agent_terminated", agent_id=agent_id, task_id=task.task_id, status="success")
             await self.blackboard.publish(result_message)
-            # 5. DIE: Function ends, instance context is garbage collected.
+            # 6. DIE: Function ends, instance context is garbage collected.

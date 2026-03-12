@@ -55,8 +55,45 @@ def register_browser_tools(registry: GlobalToolRegistry):
         logger.warning("browser_tools_skipped", reason="langchain_community or duckduckgo-search not installed")
     except Exception as e:
         logger.error("browser_tools_error", error=str(e))
+        
+    try:
+        from tools import compile_python_tool
+        from langchain_core.tools import StructuredTool
+        
+        compiler_tool = StructuredTool.from_function(func=compile_python_tool)
+        compiler_adapter = LangchainAdapter(tools=[compiler_tool])
+        registry.register_adapter(compiler_adapter)
+        logger.info("core_tools_registered", tools=["compile_python_tool"])
+    except ImportError:
+        logger.warning("core_tools_skipped", reason="Could not import compile_python_tool from tools.py")
+
+def load_dynamic_tools(registry: GlobalToolRegistry):
+    """
+    Loads auto-generated Python tools from the agent_tools module if it exists.
+    """
+    try:
+        import agent_tools
+        from langchain_core.tools import StructuredTool
+        import inspect
+        
+        dynamic_tools = []
+        for name, func in inspect.getmembers(agent_tools, inspect.isfunction):
+            # Exclude private functions or imported dependencies like 'dumps'
+            if not name.startswith("_") and func.__module__ == 'agent_tools':
+                tool = StructuredTool.from_function(func=func)
+                dynamic_tools.append(tool)
+                
+        if dynamic_tools:
+            adapter = LangchainAdapter(tools=dynamic_tools)
+            registry.register_adapter(adapter)
+            logger.info("dynamic_tools_loaded", count=len(dynamic_tools), tools=[t.name for t in dynamic_tools])
+    except ImportError:
+        logger.info("dynamic_tools_skipped", reason="agent_tools.py not found or empty")
+    except Exception as e:
+        logger.error("dynamic_tools_error", error=str(e))
 
 register_browser_tools(registry)
+load_dynamic_tools(registry)
 
 
 @asynccontextmanager
@@ -96,11 +133,15 @@ API_KEY_NAME = "X-API-Key"
 VALID_API_KEY = "nagent-dev-key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
-def get_current_user(api_key: str = Depends(api_key_header)):
+def get_current_user(
+    api_key: str = Depends(api_key_header),
+    api_key_query: str = Query(None, alias="api_key")
+):
     """Basic API Key user management/auth."""
-    if api_key == VALID_API_KEY:
+    key = api_key or api_key_query
+    if key == VALID_API_KEY:
         return {"user_id": "dev_user"}
-    raise HTTPException(status_code=403, detail="Invalid API Key. Please provide X-API-Key header.")
+    raise HTTPException(status_code=403, detail="Invalid API Key. Please provide X-API-Key header or api_key query param.")
 
 # --- Models ---
 class WorkflowRequest(BaseModel):
@@ -117,64 +158,59 @@ class HumanInputRequest(BaseModel):
     task_id: str
     input: str
 
+class ResumeWorkflowRequest(BaseModel):
+    new_objective: str
+    provider: str = "google"
+    model: str = "gemini-3.1-flash-lite-preview"
+
 # --- Background Task Runner ---
-async def execute_workflow_task(session_id: str, objective: str, provider: str = "google", model: str = "gemini-1.5-flash"):
+async def execute_workflow_task(session_id: str, objective: str, provider: str = "google", model: str = "gemini-3.1-flash-lite-preview"):
     try:
         logger.info("workflow_start", session_id=session_id, objective=objective)
         # 1. Update status to architecting
         await state_manager.update_status(session_id, "architecting")
 
-        # 2. Architect Workflow
-        # MetaAgent uses the synchronous OpenAI client. Run it in a thread-pool executor
-        # so it does not block the async event loop (Bug 14).
-        meta_agent = MetaAgent(model_name=f"{provider}/{model}")
+        # 2. Architect Workflow directly
+        meta_provider = "gemini" if provider == "google" else provider
+        meta_agent = MetaAgent(model_name=f"{meta_provider}/{model}")
         available_tools = list(registry._registry.keys())
         loop = asyncio.get_event_loop()
         
-        # Evaluate complexity first
-        evaluation = await loop.run_in_executor(
-            None, meta_agent.evaluate_complexity, objective
-        )
-        
-        if not evaluation.requires_swarm:
-            logger.info("workflow_simple_response", session_id=session_id)
-            # Simple task, single LLM response
-            response_text = evaluation.direct_response or evaluation.reasoning
-            msg = A2AMessage(
-                message_id=f"msg_meta_{int(time.time())}",
-                thread_id="meta_thread",
-                sender_id="meta_agent",
-                receiver_id="blackboard",
-                performative="inform",
-                payload=MessagePayload(natural_language=response_text),
-                timestamp=time.time()
-            )
-            await blackboard.publish(msg)
-            
-            # Create a dummy task so frontend can display it
-            dummy_task = SubTask(
-                task_id="meta_thread",
-                description=objective,
-                required_capabilities=[],
-                dependencies=[],
-                provider=provider,
-                model=model
-            )
-            state = await state_manager.load_state(session_id)
-            if state:
-                state.tasks = [dummy_task]
-                state.status = "completed"
-                await state_manager.save_state(state)
-            return
+        # PROVIDER ROUTING MAP (Shift from prompts to configuration)
+        # Using the map to intelligently override what the LLM might hallucinate
+        PROVIDER_ROUTING = {
+            "extract_text": "gemini-3.1-flash-lite-preview",
+            "web_search": "gemini-3.1-flash-lite-preview",
+            "compile_python_tool": "gpt-4o",
+            "reasoning": "gpt-4o",
+            "creative_writing": "claude-3-5-sonnet-latest",
+            "default": "gemini-3.1-flash-lite-preview"
+        }
 
+        # Generate structural manifest
         manifest = await loop.run_in_executor(
             None, meta_agent.architect_workflow, objective, available_tools
         )
         logger.info("workflow_manifest_created", session_id=session_id, agent_count=len(manifest.blueprints))
 
-        # Map Blueprints to SubTasks (as MetaAgent currently only outputs Blueprints)
+        # Map Blueprints to SubTasks while enforcing routing overrides
         tasks: List[SubTask] = []
         for bp in manifest.blueprints:
+            # Overwrite provider dynamically based on tools required to enforce 
+            # infrastructure-level routing over prompt hallucination
+            injected = bp.injected_tools
+            best_model = PROVIDER_ROUTING["default"]
+            best_provider = "google"
+            
+            if "compile_python_tool" in injected:
+                best_model, best_provider = PROVIDER_ROUTING["compile_python_tool"], "openai"
+            elif not injected and getattr(bp, "include_history", False):
+                # Synthesis or writing tasks (no tools, heavy context reading)
+                best_model, best_provider = PROVIDER_ROUTING["creative_writing"], "anthropic"
+                
+            bp.model = best_model
+            bp.provider = best_provider
+            
             tasks.append(SubTask(
                 task_id=bp.target_task_id,
                 description=f"Task derived from blueprint: {bp.agent_id}",
@@ -199,6 +235,10 @@ async def execute_workflow_task(session_id: str, objective: str, provider: str =
 
         # 4. Mark Completed
         await state_manager.update_status(session_id, "completed")
+        
+        # 5. Background Optimization
+        from optimization import optimize_blueprints_task
+        asyncio.create_task(optimize_blueprints_task(session_id, state_manager, blackboard))
 
     except Exception as e:
         logger.error("workflow_failed", session_id=session_id, error=str(e))
@@ -210,6 +250,64 @@ async def execute_workflow_task_wrapper(session_id: str, objective: str, provide
     except asyncio.CancelledError:
         logger.info("workflow_cancelled", session_id=session_id)
         raise
+    finally:
+        current_task = asyncio.current_task()
+        if current_task in active_workflow_tasks:
+            active_workflow_tasks.remove(current_task)
+
+async def resume_workflow_task(session_id: str, new_objective: str, provider: str, model: str):
+    try:
+        await state_manager.update_status(session_id, "architecting")
+        state = await state_manager.load_state(session_id)
+        
+        # Gather previous terminal output from blackboard
+        task_ids = {t.task_id for t in state.tasks}
+        history = await blackboard.get_thread_history(thread_ids=task_ids)
+        terminal_messages = [m for m in history if m.performative == "inform"]
+        last_results = "\n".join([f"[{m.sender_id}]: {m.payload.natural_language}" for m in terminal_messages[-5:]])
+        
+        meta_provider = "gemini" if provider == "google" else provider
+        meta_agent = MetaAgent(model_name=f"{meta_provider}/{model}")
+        available_tools = list(registry._registry.keys())
+        loop = asyncio.get_event_loop()
+        
+        combined_objective = f"Previous results: {last_results}\n\nNew instructions: {new_objective}\nOnly architect tasks to fulfill the NEW instructions based on the previous results."
+        new_manifest = await loop.run_in_executor(None, meta_agent.architect_workflow, combined_objective, available_tools)
+        
+        new_tasks = []
+        terminal_task_ids = list(task_ids)
+        
+        for bp in new_manifest.blueprints:
+            bp.target_task_id = f"{bp.target_task_id}_resumed"
+            # Link to old threads to satisfy DAG
+            bp.dependencies = list(set(bp.dependencies + terminal_task_ids))
+            state.manifest.blueprints.append(bp)
+            
+            bp.model = model
+            bp.provider = "google" if meta_provider == "gemini" else meta_provider
+            
+            new_tasks.append(SubTask(
+                task_id=bp.target_task_id,
+                description=f"Resumed Task: {bp.agent_id}",
+                required_capabilities=bp.injected_tools,
+                dependencies=bp.dependencies,
+                provider=bp.provider,
+                model=bp.model
+            ))
+            
+        state.tasks.extend(new_tasks)
+        state.status = "executing"
+        await state_manager.save_state(state)
+        
+        compiler = JITCompiler(blackboard=blackboard, registry=registry)
+        await compiler.execute_manifest(new_manifest, new_tasks)
+        await state_manager.update_status(session_id, "completed")
+        
+        from optimization import optimize_blueprints_task
+        asyncio.create_task(optimize_blueprints_task(session_id, state_manager, blackboard))
+    except Exception as e:
+        logger.error("resumption_failed", session_id=session_id, error=str(e))
+        await state_manager.update_status(session_id, "failed")
     finally:
         current_task = asyncio.current_task()
         if current_task in active_workflow_tasks:
@@ -230,7 +328,8 @@ async def submit_workflow(
         session_id=session_id,
         original_objective=request.objective,
         tasks=[],
-        status="analyzing"
+        status="analyzing",
+        timestamp=time.time()
     )
     await state_manager.save_state(initial_state)
 
@@ -244,6 +343,12 @@ async def submit_workflow(
         message="Workflow submitted successfully and is currently being architected."
     )
 
+@app.get("/workflows")
+async def list_workflows(user: dict = Depends(get_current_user)):
+    """List all workflow states for the current user's tenant."""
+    workflows = await state_manager.list_workflows("tenant_1")
+    return workflows
+
 @app.get("/workflows/{session_id}")
 async def get_workflow(session_id: str, user: dict = Depends(get_current_user)):
     """Get the current status, tasks, and manifest of a workflow."""
@@ -256,9 +361,15 @@ async def get_workflow(session_id: str, user: dict = Depends(get_current_user)):
     task_ids = {t.task_id for t in state.tasks} if state.tasks else None
     history = await blackboard.get_thread_history(thread_ids=task_ids)
 
+    from db import get_workflow_analytics
+    analytics = []
+    if task_ids:
+        analytics = await asyncio.to_thread(get_workflow_analytics, list(task_ids))
+
     return {
         "state": state.model_dump(),
-        "logs": [msg.model_dump() for msg in history]
+        "logs": [msg.model_dump() for msg in history],
+        "analytics": analytics
     }
 
 @app.post("/workflows/{session_id}/input")
@@ -277,17 +388,38 @@ async def submit_human_input(
     if request.task_id not in task_ids:
         raise HTTPException(status_code=400, detail=f"task_id '{request.task_id}' not found in this workflow.")
 
-    unblock_msg = A2AMessage(
-        message_id=f"msg_human_{int(time.time())}",
-        thread_id=request.task_id,
-        sender_id="human",
-        receiver_id="unblock_agent",
-        performative="inform",
-        payload=MessagePayload(natural_language=request.input),
-        timestamp=time.time()
-    )
-    await blackboard.publish(unblock_msg)
-    return {"status": "input submitted", "task_id": request.task_id}
+    # The compiler holds the reference to the agent that is hibernating and waiting for input.
+    # We can directly unblock it.
+    compiler = JITCompiler(blackboard=blackboard, registry=registry)
+    await compiler.unblock_agent(request.task_id, request.input)
+    return {"status": "success", "message": f"Input submitted for task {request.task_id}"}
+    
+@app.get("/analytics/costs/summary")
+async def get_costs_summary(user: dict = Depends(get_current_user)):
+    """API endpoint to get total cost and tokens across the user's entire org."""
+    from db import get_global_cost_summary
+    import asyncio
+    
+    summary = await asyncio.to_thread(get_global_cost_summary, "tenant_1")
+    return summary
+
+@app.post("/workflows/{session_id}/resume", response_model=WorkflowResponse)
+async def resume_workflow(
+    session_id: str,
+    request: ResumeWorkflowRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Resume a completed thread with new instructions."""
+    state = await state_manager.load_state(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    if state.status not in ["completed", "failed"]:
+        raise HTTPException(status_code=400, detail="Cannot resume an active workflow")
+    
+    task = asyncio.create_task(resume_workflow_task(session_id, request.new_objective, request.provider, request.model))
+    active_workflow_tasks.add(task)
+    return WorkflowResponse(session_id=session_id, status="analyzing", message="Resumption started")
 
 # --- WebSockets ---
 
