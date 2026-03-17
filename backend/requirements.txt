@@ -1,10 +1,14 @@
 openai
 pydantic
+fastapi
+uvicorn[standard]
+gunicorn
 redis
 langchain-core
+langchain-community
+ddgs
 composio-openai
-fastapi
-uvicornstructlog
+structlog
 opentelemetry-api
 opentelemetry-sdk
 opentelemetry-instrumentation-fastapi
@@ -13,3 +17,7 @@ pytest
 pytest-asyncio
 pytest-mock
 litellm
+composio
+langchain
+crewai-tools
+psycopg2-binary

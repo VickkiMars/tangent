@@ -27,6 +27,21 @@ class JITCompiler:
         self.blackboard = blackboard
         self.registry = registry
         self.listener_task = None
+        self.agent_tasks: set = set()
+        self.hibernated_task_ids: set = set()
+
+    async def unblock_agent(self, task_id: str, human_input: str):
+        """Publishes a message to the blackboard to unblock a hibernated agent."""
+        unblock_msg = A2AMessage(
+            message_id=f"unblock_{task_id}_{int(time.time())}",
+            thread_id=task_id,
+            sender_id="human",
+            receiver_id="unblock_agent",
+            performative="inform",
+            payload=MessagePayload(natural_language=human_input),
+            timestamp=time.time()
+        )
+        await self.blackboard.publish(unblock_msg)
 
     async def start_resume_listener(self, manifest: SynthesisManifest, tasks: List[SubTask]):
         """Polls for unblocking events to respawn hibernated agents."""
@@ -53,9 +68,12 @@ class JITCompiler:
                         }
                     
                     logger.info("resuming_hibernated_agent", task_id=message.thread_id, has_state=bool(initial_context))
-                    
-                    # 2. Respawn agent, injecting the restored context
-                    asyncio.create_task(self._spawn_ephemeral_agent(blueprint, target_task, initial_context=initial_context))
+
+                    # 2. Respawn agent, injecting the restored context.
+                    # Track the new task so execute_manifest keeps waiting for it.
+                    self.hibernated_task_ids.discard(message.thread_id)
+                    new_task = asyncio.create_task(self._spawn_ephemeral_agent(blueprint, target_task, initial_context=initial_context))
+                    self.agent_tasks.add(new_task)
         except asyncio.CancelledError:
             self.blackboard.unsubscribe("unblock_agent", queue)
 
@@ -65,6 +83,7 @@ class JITCompiler:
         self.tasks = tasks
         self.task_lookup = {task.task_id: task for task in tasks}
         self.agent_tasks = set()
+        self.hibernated_task_ids = set()
 
         self.listener_task = asyncio.create_task(self.start_resume_listener(manifest, tasks))
 
@@ -76,9 +95,19 @@ class JITCompiler:
                 agent_thread = asyncio.create_task(self._spawn_ephemeral_agent(blueprint, target_task))
             self.agent_tasks.add(agent_thread)
 
-        while self.agent_tasks:
-            done, pending = await asyncio.wait(self.agent_tasks, return_when=asyncio.FIRST_COMPLETED)
-            self.agent_tasks = pending
+        # Keep running as long as active agents OR hibernated agents exist.
+        # Hibernated agents live in Redis until a human unblocks them; the resume
+        # listener will re-add their tasks to self.agent_tasks when that happens.
+        while self.agent_tasks or self.hibernated_task_ids:
+            if not self.agent_tasks:
+                # All current tasks done; waiting for human to unblock hibernated agents.
+                await asyncio.sleep(0.1)
+                continue
+            # Take a snapshot so newly-added tasks (from resume listener) are not lost.
+            tasks_snapshot = set(self.agent_tasks)
+            done, _ = await asyncio.wait(tasks_snapshot, return_when=asyncio.FIRST_COMPLETED)
+            # Remove only the finished tasks; preserve any tasks added during the wait.
+            self.agent_tasks -= done
 
         # Cancel the resume listener now that all agents have finished
         if self.listener_task and not self.listener_task.done():
@@ -253,13 +282,43 @@ class JITCompiler:
                 # Agent is resuming: Hydrate previous messages
                 for msg in initial_context["conversation_history"]:
                     messages.append(msg)
-                
-                # Append the new human response
+
+                # Inject the human response as a proper tool result so the LLM sees a
+                # complete conversation (tool_call → tool_result) rather than an
+                # unanswered request_human_input tool call, which causes API errors.
                 if "human_input_response" in initial_context:
-                    messages.append({
-                        "role": "system",
-                        "content": f"Human has responded: {initial_context['human_input_response']}. Continue processing."
-                    })
+                    human_text = initial_context["human_input_response"]
+                    # Find the tool_call_id of the last request_human_input call
+                    last_tool_call_id = None
+                    for msg in reversed(messages):
+                        tool_calls = None
+                        if isinstance(msg, dict):
+                            tool_calls = msg.get("tool_calls") or []
+                        elif hasattr(msg, "tool_calls"):
+                            tool_calls = msg.tool_calls or []
+                        if tool_calls:
+                            for tc in tool_calls:
+                                name = tc.get("function", {}).get("name") if isinstance(tc, dict) else getattr(getattr(tc, "function", None), "name", None)
+                                if name == "request_human_input":
+                                    last_tool_call_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                                    break
+                        if last_tool_call_id:
+                            break
+
+                    if last_tool_call_id:
+                        # Proper tool result — satisfies the LLM's tool_call/tool_result protocol
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": last_tool_call_id,
+                            "name": "request_human_input",
+                            "content": human_text
+                        })
+                    else:
+                        # Fallback: inject as a user message if we can't find the call id
+                        messages.append({
+                            "role": "user",
+                            "content": f"Human has responded: {human_text}. Continue processing."
+                        })
             else:
                 # Fresh start
                 messages = [
@@ -358,13 +417,19 @@ class JITCompiler:
                                     request_message = "Please provide input."
                                     expected_type = "text"
                                 
-                                # Prepare serialized history to save
+                                # Prepare serialized history to save.
+                                # Use a JSON round-trip to guarantee Redis-safe dicts
+                                # even when messages contain nested pydantic objects.
                                 def serialize_message(m):
                                     if hasattr(m, 'model_dump'):
-                                        return m.model_dump()
-                                    if hasattr(m, '__dict__'):
-                                        return m.__dict__
-                                    return m
+                                        raw = m.model_dump()
+                                    elif hasattr(m, '__dict__'):
+                                        raw = dict(m.__dict__)
+                                    elif isinstance(m, dict):
+                                        raw = m
+                                    else:
+                                        raw = str(m)
+                                    return json.loads(json.dumps(raw, default=lambda o: o.__dict__ if hasattr(o, '__dict__') else str(o)))
 
                                 safe_messages = [serialize_message(m) for m in messages]
 
@@ -402,6 +467,9 @@ class JITCompiler:
                                     timestamp=time.time()
                                 )
                                 logger.info("agent_hibernate", agent_id=agent_id, task_id=task.task_id, reason=reason)
+                                # Register as hibernated BEFORE publishing so execute_manifest
+                                # doesn't exit the loop before the publish completes.
+                                self.hibernated_task_ids.add(task.task_id)
                                 await self.blackboard.publish(hibernate_msg)
                                 return # Self-destruct and wait for human response unblock
 

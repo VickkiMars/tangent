@@ -22,6 +22,97 @@ def get_db_connection():
         if conn:
             conn.close()
 
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS tenants (
+    id VARCHAR(255) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS users (
+    id VARCHAR(255) PRIMARY KEY,
+    tenant_id VARCHAR(255) REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255),
+    email VARCHAR(255) UNIQUE,
+    budget_limit_usd DECIMAL(10, 4) DEFAULT 100.0,
+    current_spend_usd DECIMAL(10, 4) DEFAULT 0.0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS predefined_workflows (
+    id VARCHAR(255) PRIMARY KEY,
+    tenant_id VARCHAR(255) REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    visual_layout JSONB NOT NULL,
+    synthesis_manifest JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS execution_threads (
+    id VARCHAR(255) PRIMARY KEY,
+    tenant_id VARCHAR(255) REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+    objective TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'analyzing',
+    total_cost_usd DECIMAL(10, 4) DEFAULT 0.0,
+    total_tokens INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+CREATE TABLE IF NOT EXISTS agent_human_input_states (
+    thread_id VARCHAR(255) PRIMARY KEY REFERENCES execution_threads(id) ON DELETE CASCADE,
+    agent_blueprint JSONB NOT NULL,
+    conversation_history JSONB NOT NULL,
+    collected_context JSONB,
+    human_input_request JSONB NOT NULL,
+    human_response JSONB,
+    status VARCHAR(50) DEFAULT 'waiting',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    responded_at TIMESTAMP WITH TIME ZONE
+);
+CREATE TABLE IF NOT EXISTS agent_tools (
+    id VARCHAR(255) PRIMARY KEY,
+    tenant_id VARCHAR(255) REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    python_code TEXT NOT NULL,
+    is_approved BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS agent_analytics (
+    id SERIAL PRIMARY KEY,
+    thread_id VARCHAR(255) REFERENCES execution_threads(id) ON DELETE CASCADE,
+    agent_id VARCHAR(255) NOT NULL,
+    target_task_id VARCHAR(255) NOT NULL,
+    provider VARCHAR(50),
+    model VARCHAR(100),
+    tokens_prompt INTEGER DEFAULT 0,
+    tokens_completion INTEGER DEFAULT 0,
+    cost_usd DECIMAL(10, 6) DEFAULT 0.0,
+    tools_called JSONB DEFAULT '[]',
+    was_successful BOOLEAN DEFAULT TRUE,
+    lifetime_seconds DECIMAL(10, 2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS query_optimizations (
+    id SERIAL PRIMARY KEY,
+    original_query TEXT NOT NULL,
+    optimized_query TEXT NOT NULL,
+    tool_name VARCHAR(255) NOT NULL,
+    success_score DECIMAL(5, 2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+"""
+
+def run_schema_migrations():
+    """Creates all required tables if they don't already exist."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(SCHEMA_SQL)
+            conn.commit()
+        logger.info("db_schema_ready")
+    except Exception as e:
+        logger.error("db_migration_error", error=str(e))
+
 def ensure_tenant_user(user_id: str, tenant_id: str = "tenant_1"):
     try:
         with get_db_connection() as conn:

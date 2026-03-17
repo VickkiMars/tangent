@@ -1,11 +1,13 @@
 import asyncio
 import uuid
+import os
 import json
 import time
 from contextlib import asynccontextmanager
 from typing import Dict, Any, List
 
 import structlog
+from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Query
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,7 +29,7 @@ logger = structlog.get_logger(__name__)
 tracer = get_tracer(__name__)
 
 # Initialize Core Services
-redis_url = "redis://localhost:6379/0"
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 state_manager = StateManager(redis_url=redis_url)
 blackboard = EventBlackboard(redis_url=redis_url)
 registry = GlobalToolRegistry()
@@ -37,35 +39,67 @@ active_workflow_tasks: set[asyncio.Task] = set()
 
 def register_browser_tools(registry: GlobalToolRegistry):
     """
-    Registers browser/search tools.
-    Modify this function to change search providers or browser configuration.
+    Registers Langchain-based search/research tools.
+    All tools are registered via LangchainAdapter so the meta agent can assign
+    them to blueprints by name.
     """
+    search_tools = []
+
+    # ── Web Search (DuckDuckGo) ───────────────────────────────────────────────
     try:
-        # Using DuckDuckGo as the default search provider
         from langchain_community.tools import DuckDuckGoSearchRun
-        
-        # You can configure the search tool here (e.g., region, time, etc.)
-        search = DuckDuckGoSearchRun()
-        
-        # Wrap in adapter and register
-        adapter = LangchainAdapter(tools=[search])
+        search = DuckDuckGoSearchRun(
+            name="web_search",
+            description="Search the web using DuckDuckGo. Input: a search query string. Returns relevant search result snippets. Use for current events, factual lookups, and general research."
+        )
+        search_tools.append(search)
+        logger.info("tool_registered", tool="web_search")
+    except (ImportError, Exception) as e:
+        logger.warning("web_search_skipped", reason=str(e))
+
+    # ── Wikipedia ────────────────────────────────────────────────────────────
+    try:
+        from langchain_community.tools import WikipediaQueryRun
+        from langchain_community.utilities import WikipediaAPIWrapper
+        wiki = WikipediaQueryRun(
+            name="wikipedia_search",
+            description="Search and retrieve summaries from Wikipedia. Input: a topic or entity name. Returns a concise encyclopedia summary. Use for background knowledge on well-known topics, people, or concepts.",
+            api_wrapper=WikipediaAPIWrapper(top_k_results=3, doc_content_chars_max=4000)
+        )
+        search_tools.append(wiki)
+        logger.info("tool_registered", tool="wikipedia_search")
+    except (ImportError, Exception) as e:
+        logger.warning("wikipedia_search_skipped", reason=str(e))
+
+    # ── ArXiv ─────────────────────────────────────────────────────────────────
+    try:
+        from langchain_community.tools import ArxivQueryRun
+        from langchain_community.utilities import ArxivAPIWrapper
+        arxiv = ArxivQueryRun(
+            name="arxiv_search",
+            description="Search academic papers on ArXiv. Input: a research topic or paper title. Returns paper titles, authors, and abstracts. Use for scientific research, technical literature review, and academic citations.",
+            api_wrapper=ArxivAPIWrapper(top_k_results=3, doc_content_chars_max=4000)
+        )
+        search_tools.append(arxiv)
+        logger.info("tool_registered", tool="arxiv_search")
+    except (ImportError, Exception) as e:
+        logger.warning("arxiv_search_skipped", reason=str(e))
+
+    if search_tools:
+        adapter = LangchainAdapter(tools=search_tools)
         registry.register_adapter(adapter)
-        logger.info("browser_tools_registered", tools=["duckduckgo_search"])
-    except ImportError:
-        logger.warning("browser_tools_skipped", reason="langchain_community or duckduckgo-search not installed")
-    except Exception as e:
-        logger.error("browser_tools_error", error=str(e))
-        
+        logger.info("search_tools_registered", count=len(search_tools), tools=[t.name for t in search_tools])
+
+    # ── Core compiler tool ────────────────────────────────────────────────────
     try:
         from tools import compile_python_tool
         from langchain_core.tools import StructuredTool
-        
         compiler_tool = StructuredTool.from_function(func=compile_python_tool)
         compiler_adapter = LangchainAdapter(tools=[compiler_tool])
         registry.register_adapter(compiler_adapter)
-        logger.info("core_tools_registered", tools=["compile_python_tool"])
+        logger.info("tool_registered", tool="compile_python_tool")
     except ImportError:
-        logger.warning("core_tools_skipped", reason="Could not import compile_python_tool from tools.py")
+        logger.warning("compile_python_tool_skipped", reason="Could not import compile_python_tool from tools.py")
 
 def load_dynamic_tools(registry: GlobalToolRegistry):
     """
@@ -130,7 +164,7 @@ app.add_middleware(
 
 # --- Security ---
 API_KEY_NAME = "X-API-Key"
-VALID_API_KEY = "nagent-dev-key"
+VALID_API_KEY = os.getenv("API_KEY", "nagent-dev-key")
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 def get_current_user(
@@ -174,8 +208,15 @@ async def execute_workflow_task(session_id: str, objective: str, provider: str =
         meta_provider = "gemini" if provider == "google" else provider
         meta_agent = MetaAgent(model_name=f"{meta_provider}/{model}")
         available_tools = list(registry._registry.keys())
+        # Build name→description map from registered schemas so the meta agent
+        # understands what each tool does and can assign them correctly.
+        tool_descriptions = {}
+        for name, schema in registry._schemas.items():
+            func_info = schema.get("function", schema) if isinstance(schema, dict) else {}
+            desc = func_info.get("description", "") if isinstance(func_info, dict) else ""
+            tool_descriptions[name] = desc
         loop = asyncio.get_event_loop()
-        
+
         # PROVIDER ROUTING MAP (Shift from prompts to configuration)
         # Using the map to intelligently override what the LLM might hallucinate
         PROVIDER_ROUTING = {
@@ -189,7 +230,7 @@ async def execute_workflow_task(session_id: str, objective: str, provider: str =
 
         # Generate structural manifest
         manifest = await loop.run_in_executor(
-            None, meta_agent.architect_workflow, objective, available_tools
+            None, meta_agent.architect_workflow, objective, available_tools, tool_descriptions
         )
         logger.info("workflow_manifest_created", session_id=session_id, agent_count=len(manifest.blueprints))
 
@@ -269,10 +310,15 @@ async def resume_workflow_task(session_id: str, new_objective: str, provider: st
         meta_provider = "gemini" if provider == "google" else provider
         meta_agent = MetaAgent(model_name=f"{meta_provider}/{model}")
         available_tools = list(registry._registry.keys())
+        tool_descriptions = {}
+        for name, schema in registry._schemas.items():
+            func_info = schema.get("function", schema) if isinstance(schema, dict) else {}
+            desc = func_info.get("description", "") if isinstance(func_info, dict) else ""
+            tool_descriptions[name] = desc
         loop = asyncio.get_event_loop()
-        
+
         combined_objective = f"Previous results: {last_results}\n\nNew instructions: {new_objective}\nOnly architect tasks to fulfill the NEW instructions based on the previous results."
-        new_manifest = await loop.run_in_executor(None, meta_agent.architect_workflow, combined_objective, available_tools)
+        new_manifest = await loop.run_in_executor(None, meta_agent.architect_workflow, combined_objective, available_tools, tool_descriptions)
         
         new_tasks = []
         terminal_task_ids = list(task_ids)
@@ -486,3 +532,7 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         blackboard.unsubscribe("blackboard", queue)
+
+# --- Mount Static Frontend (Served by FastAPI) ---
+# Must be registered LAST so API routes take priority over the catch-all SPA mount.
+app.mount("/", StaticFiles(directory="static", html=True), name="static")

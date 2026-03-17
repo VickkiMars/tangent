@@ -21,16 +21,30 @@ class LangchainAdapter(ToolAdapter):
 
     def get_schemas(self) -> Dict[str, Dict[str, Any]]:
         schemas_dict = {}
-        try:
-            from langchain_core.utils.function_calling import format_tool_to_openai_function
-        except ImportError:
-            return schemas_dict
-
         for tool in self.lc_tools:
-            # format_tool_to_openai_function returns only the function definition dict.
-            # Wrap it in the full OpenAI tool format that the API expects.
-            func_schema = format_tool_to_openai_function(tool)
-            schemas_dict[tool.name] = {"type": "function", "function": func_schema}
+            try:
+                # Prefer the newer API (langchain-core 0.2+)
+                from langchain_core.utils.function_calling import convert_to_openai_tool
+                schemas_dict[tool.name] = convert_to_openai_tool(tool)
+            except (ImportError, Exception):
+                try:
+                    from langchain_core.utils.function_calling import format_tool_to_openai_function
+                    func_schema = format_tool_to_openai_function(tool)
+                    schemas_dict[tool.name] = {"type": "function", "function": func_schema}
+                except (ImportError, Exception):
+                    # Fallback: build a minimal schema from the tool's args_schema
+                    try:
+                        input_schema = tool.args_schema.schema() if tool.args_schema else {"properties": {}, "type": "object"}
+                        schemas_dict[tool.name] = {
+                            "type": "function",
+                            "function": {
+                                "name": tool.name,
+                                "description": getattr(tool, "description", ""),
+                                "parameters": input_schema,
+                            }
+                        }
+                    except Exception:
+                        pass
         return schemas_dict
 
 

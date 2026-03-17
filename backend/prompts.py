@@ -31,9 +31,6 @@ You must output a valid JSON object matching this exact schema:
   ]
 }
 
-## AVAILABLE TOOLS
-{tools_list}
-
 ## RULES
 
 1. **Fan-Out First**: If the request involves multiple subjects, dimensions, or data sources — spawn one agent per item. Never loop inside a single agent when you can spawn parallel agents.
@@ -178,12 +175,6 @@ User: "Evaluate PostgreSQL for a fintech startup across security, scalability, a
 ```
 
 ---
-
-## YOUR TASK
-
-Analyze this user request: {user_request}
-
-Think through the decomposition before writing: How many parallel agents can run immediately? What is the minimal aggregation layer? Are there any agents doing more than one thing that should be split?
 
 Output ONLY the JSON manifest. No explanations, no markdown formatting.
 """
