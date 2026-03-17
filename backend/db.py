@@ -6,8 +6,7 @@ import structlog
 from contextlib import contextmanager
 
 logger = structlog.get_logger(__name__)
-# Utilizing kami user as recently configured by the user
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://kami:kami@localhost/tangent_db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 @contextmanager
 def get_db_connection():

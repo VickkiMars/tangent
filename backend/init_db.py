@@ -9,8 +9,7 @@ except ImportError:
     print("Please install asyncpg: pip install asyncpg")
     sys.exit(1)
 
-# Default to local postgres, but allow external config
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://kami:kami@localhost:5432/tangent_db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # This script initializes the PostgreSQL database with the necessary schema
 # for the expanded Tangent Agent Framework (multi-tenant, analytics, human-in-the-loop, etc.)

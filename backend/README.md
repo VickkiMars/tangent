@@ -9,6 +9,71 @@
 3.  **Event Sourcing**: The `EventBlackboard` is the single source of truth. Every interaction is an immutable event, enabling replayability, auditability, and long-running workflows that span days or weeks.
 4.  **Universal Tooling**: A unified registry interface that aggregates tools from multiple providers (Composio, LangChain, CrewAI, Custom) into a strictly scoped toolkit for each ephemeral agent.
 
+## 🚀 Installation
+
+### Prerequisites
+
+- Python 3.10+
+- Docker & Docker Compose
+- An API key for at least one LLM provider (OpenAI, Anthropic, or Gemini)
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/your-org/tangent.git
+cd tangent
+```
+
+### 2. Configure environment variables
+
+Copy the example env file and fill in your API keys:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Edit `backend/.env`:
+
+```env
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...
+COMPOSIO_API_KEY=        # optional
+API_KEY=nagent-dev-key   # used to authenticate requests to the backend
+```
+
+### 3. Start the services
+
+```bash
+docker compose up --build
+```
+
+This starts three services:
+- **app** — FastAPI backend on `http://localhost:8000`
+- **redis** — State/event bus on port `6380`
+- **postgres** — Persistent storage on port `5433`
+
+### 4. (Optional) Run locally without Docker
+
+Install dependencies and start the backend manually:
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
+
+> Redis and Postgres must still be running. You can start just the infrastructure with:
+> ```bash
+> docker compose up redis postgres
+> ```
+
+### 5. Verify
+
+```bash
+curl -H "X-API-Key: nagent-dev-key" http://localhost:8000/health
+```
+
 ## 🏗 Architecture
 
 ### 1. Meta-Agent Architect (`meta.py`)
@@ -24,13 +89,13 @@ The execution engine. It takes the `SynthesisManifest` and:
 
 ### 3. Event Blackboard (`blackboard.py`)
 The central nervous system. It acts as a pub/sub message bus and a persistent event store.
-*   **Current Status**: In-memory (Ephemeral).
-*   **Roadmap**: Redis-backed persistence to support system restarts and long-running "human-in-the-loop" workflows.
+*   **Current Status**: Redis-backed persistence.
+*   **Roadmap**: Support long-running "human-in-the-loop" workflows.
 
 ### 4. Universal Tool Registry (`registry.py`)
 A facade over various tool ecosystems. It allows the Meta-Agent to select the best tool for the job, regardless of whether it comes from a proprietary API, a community library, or a local function.
 
-## 🚀 Key Features (Planned)
+## 🔑 Key Features
 
 *   **Resilience**: System restarts don't kill workflows. The next compiler instance picks up where the last one left off by reading the Blackboard history.
 *   **Security**: Agents only see the tools they are explicitly granted in their blueprint.
@@ -47,8 +112,10 @@ tangent/
 ├── registry.py         # Tool management facade
 ├── schemas.py          # Pydantic models & data structures
 ├── prompts.py          # System prompts for agents
-├── PROBLEMS.md         # Architecture decision log & roadmap
-└── ...
+├── state_manager.py    # Redis-backed workflow state
+├── db.py               # PostgreSQL persistence layer
+├── main.py             # FastAPI entrypoint
+└── requirements.txt    # Python dependencies
 ```
 
 ## 🛠 Usage (Conceptual)
