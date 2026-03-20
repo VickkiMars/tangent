@@ -1,0 +1,234 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-background: #000000;
+  --color-card: #0E0E0E;
+  --color-card-elevated: rgba(255, 255, 255, 0.05);
+
+  /* Cyan is the primary interactive accent */
+  --color-primary: #00E5FF;
+  --color-primary-light: #33EAFF;
+  --color-primary-dark: #00B8CC;
+
+  /* Full design-spec accent palette */
+  --color-cyan:    #FFFFFF;
+  --color-blue:    #0066FF;
+  --color-orange:  #FF8A00;
+  --color-success: #10B981;
+
+  --color-text-primary:   #FFFFFF;
+  --color-text-secondary: #A1A1AA;
+  --color-text-tertiary:  #71717A;
+
+  --font-sans: Inter, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --image-horizon-glow: linear-gradient(to top, #FF8A00, #00E5FF, transparent);
+
+  --animate-float-slow:   float 8s ease-in-out infinite;
+  --animate-float-medium: float 6s ease-in-out infinite reverse;
+  --animate-float-fast:   float 4s ease-in-out infinite;
+  --animate-pulse-slow:   pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+  @keyframes float {
+    0%   { transform: translateY(0px)   rotate(0deg); }
+    50%  { transform: translateY(-20px) rotate(5deg); }
+    100% { transform: translateY(0px)   rotate(0deg); }
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-text-primary font-sans antialiased overflow-x-hidden
+           selection:bg-cyan selection:text-black;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-card-elevated backdrop-blur-md border border-white/10;
+  }
+
+  .mesh-bg {
+    background:
+      radial-gradient(circle at 50% 100%, rgba(0, 229, 255, 0.06), transparent 50%),
+      radial-gradient(circle at 0%   0%,  rgba(255, 138,   0, 0.04), transparent 40%);
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent
+           bg-gradient-to-r from-cyan via-white to-orange;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track  { @apply bg-background; }
+::-webkit-scrollbar-thumb  { @apply bg-white/10 rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-white/20; }
+
+/* ReactFlow – strip default white backgrounds */
+.react-flow__renderer,
+.react-flow__background { background: transparent !important; }
+
+/* ─── Markdown Prose Styling (Chat & Outputs) ────────── */
+.markdown-body {
+  font-size: 0.875rem;
+  line-height: inherit;
+  color: #D4D4D8;
+  font-family: var(--font-sans);
+  word-break: break-word;
+}
+.markdown-body p {
+  margin-bottom: 0.75rem;
+}
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+.markdown-body strong {
+  font-weight: 700;
+  color: #FFF;
+}
+.markdown-body em {
+  font-style: italic;
+  color: #A1A1AA;
+}
+.markdown-body a {
+  color: #00E5FF;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.2);
+  text-underline-offset: 2px;
+  transition: color 200ms;
+}
+.markdown-body a:hover {
+  color: #33EAFF;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+  font-weight: 700;
+  color: #FFF;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+.markdown-body h1:first-child, .markdown-body h2:first-child, .markdown-body h3:first-child, .markdown-body h4:first-child {
+  margin-top: 0;
+}
+.markdown-body h1 {
+  font-size: 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.5rem;
+}
+.markdown-body h2 { font-size: 1.125rem; }
+.markdown-body h3 { font-size: 1rem; }
+.markdown-body h4 {
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #A1A1AA;
+}
+
+.markdown-body ul {
+  list-style-type: disc;
+  list-style-position: outside;
+  margin-left: 1rem;
+  margin-bottom: 1rem;
+}
+.markdown-body ul li {
+  margin-bottom: 0.375rem;
+}
+.markdown-body ul::marker {
+  color: #71717A;
+}
+.markdown-body ol {
+  list-style-type: decimal;
+  list-style-position: outside;
+  margin-left: 1rem;
+  margin-bottom: 1rem;
+}
+.markdown-body ol li {
+  margin-bottom: 0.375rem;
+}
+.markdown-body ol::marker {
+  color: #71717A;
+  font-family: var(--font-mono);
+}
+.markdown-body li {
+  padding-left: 0.25rem;
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid #FF8A00;
+  background-color: rgba(255, 138, 0, 0.03);
+  padding-left: 1rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: #A1A1AA;
+  font-style: italic;
+}
+.markdown-body blockquote p {
+  margin-bottom: 0;
+}
+
+/* Inline Code */
+.markdown-body code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #33EAFF;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin: 0 2px;
+}
+
+/* Code Blocks */
+.markdown-body pre {
+  background-color: #050505;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.5);
+}
+.markdown-body pre code {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  color: #E2E8F0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  white-space: pre;
+}
+
+/* Tables */
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  text-align: left;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.markdown-body th {
+  background-color: #141414;
+  color: #FFF;
+  font-weight: 500;
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.markdown-body td {
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  background-color: #0A0A0A;
+}
+.markdown-body tr:last-child td {
+  border-bottom: none;
+}
