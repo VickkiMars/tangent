@@ -4,12 +4,12 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /app
 
 # Copy frontend package files and install dependencies
-COPY nagent/package.json nagent/yarn.lock* nagent/package-lock.json* ./nagent/
-RUN cd nagent && npm install
+COPY frontend/package.json frontend/yarn.lock* frontend/package-lock.json* ./frontend/
+RUN cd frontend && npm install
 
 # Copy the rest of the frontend source code and build
-COPY nagent/ ./nagent/
-RUN cd nagent && npm run build
+COPY frontend/ ./frontend/
+RUN cd frontend && npm run build
 
 
 # --- Stage 2: Setup Backend ---
@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir --timeout=120 --retries=5 -r requirements.txt
 COPY backend/ .
 
 # Copy built frontend from the previous stage
-COPY --from=frontend-builder /app/nagent/dist ./static
+COPY --from=frontend-builder /app/frontend/dist ./static
 
 # Copy entrypoint
 COPY entrypoint.sh /entrypoint.sh

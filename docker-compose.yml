@@ -49,6 +49,19 @@ services:
       postgres:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000
+      - VITE_API_KEY=nagent-dev-key
+    depends_on:
+      - app
+
 volumes:
   redis_data:
   postgres_data:

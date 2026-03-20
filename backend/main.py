@@ -8,13 +8,17 @@ from typing import Dict, Any, List
 
 import structlog
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Query, Request
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
- 
-from schemas import WorkflowState, SubTask, A2AMessage, MessagePayload
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
+
+import db
+from schemas import WorkflowState, SubTask, A2AMessage, MessagePayload, UserSignup, UserLogin, Token, UserResponse
 from state_manager import StateManager
 from blackboard import EventBlackboard
 from registry import GlobalToolRegistry
@@ -34,8 +38,100 @@ state_manager = StateManager(redis_url=redis_url)
 blackboard = EventBlackboard(redis_url=redis_url)
 registry = GlobalToolRegistry()
 
-# Track active tasks for clean shutdown
 active_workflow_tasks: set[asyncio.Task] = set()
+
+# --- Auth Configuration ---
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "tangent-super-secret-key-000")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# --- Auth Endpoints ---
+@app.post("/auth/signup", response_model=Token)
+async def signup(user: UserSignup, request: Request):
+    client_ip = request.client.host
+    
+    # Check IP restriction
+    if db.is_ip_restricted(client_ip):
+        raise HTTPException(status_code=400, detail="An account has already been created from this IP address.")
+    
+    # Check if user exists
+    if db.get_user_by_email(user.email):
+        raise HTTPException(status_code=400, detail="Email already registered.")
+    
+    user_id = f"user_{uuid.uuid4().hex[:8]}"
+    hashed_pwd = get_password_hash(user.password)
+    
+    success = db.create_user(
+        user_id=user_id,
+        email=user.email,
+        hashed_password=hashed_pwd,
+        name=user.name,
+        signup_ip=client_ip
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to create user.")
+    
+    access_token = create_access_token(data={"sub": user.email, "user_id": user_id})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/auth/login", response_model=Token)
+async def login(user: UserLogin):
+    db_user = db.get_user_by_email(user.email)
+    if not db_user or not verify_password(user.password, db_user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    
+    access_token = create_access_token(data={"sub": db_user["email"], "user_id": db_user["id"]})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/auth/me", response_model=UserResponse)
+async def get_me(token: str = Query(...)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="Invalid token.")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token.")
+    
+    db_user = db.get_user_by_email(email)
+    if not db_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    
+    return {
+        "id": db_user["id"],
+        "email": db_user["email"],
+        "name": db_user["name"],
+        "tenant_id": db_user["tenant_id"]
+    }
+
+def clean_error_message(e: Exception) -> str:
+    """Translate technical stack traces into user-friendly notifications."""
+    msg = str(e)
+    if "API Key" in msg or "API_KEY_INVALID" in msg:
+        return "LLM Configuration Error: API Key not found or invalid. Please check your .env settings."
+    if "rate limit" in msg.lower():
+        return "Service temporarily busy (LLM Rate Limit). Please wait a moment and retry."
+    if "BadRequestError" in msg:
+        return "LLM Request Failed: Possible malformed prompt or model unavailability."
+    if "Insufficient quota" in msg:
+        return "LLM Quota Exceeded: Please check your billing/usage limits."
+    return f"Fatal Workflow Error: {msg[:100]}"
 
 def register_browser_tools(registry: GlobalToolRegistry):
     """
@@ -152,7 +248,9 @@ app = FastAPI(
 # FastAPIInstrumentor.instrument_app(app)
 
 # --- CORS Middleware (Essential for Frontend Communication) ---
-origins = ["*"]  # In production, replace with specific frontend domain
+# In production, specify your frontend domain in the CORS_ORIGINS environment variable
+cors_origins_raw = os.getenv("CORS_ORIGINS", "*")
+origins = [origin.strip() for origin in cors_origins_raw.split(",")]
 
 app.add_middleware(
     CORSMiddleware,
@@ -284,6 +382,14 @@ async def execute_workflow_task(session_id: str, objective: str, provider: str =
     except Exception as e:
         logger.error("workflow_failed", session_id=session_id, error=str(e))
         await state_manager.update_status(session_id, "failed")
+        
+        # Stop publishing to blackboard; send directly as a session notification
+        clean_msg = clean_error_message(e)
+        await manager.broadcast_to_session(session_id, {
+            "type": "notification",
+            "performative": "failure",
+            "message": clean_msg
+        })
 
 async def execute_workflow_task_wrapper(session_id: str, objective: str, provider: str, model: str):
     try:
@@ -354,6 +460,14 @@ async def resume_workflow_task(session_id: str, new_objective: str, provider: st
     except Exception as e:
         logger.error("resumption_failed", session_id=session_id, error=str(e))
         await state_manager.update_status(session_id, "failed")
+
+        # Direct notification instead of blackboard
+        clean_msg = clean_error_message(e)
+        await manager.broadcast_to_session(session_id, {
+            "type": "notification",
+            "performative": "failure",
+            "message": clean_msg
+        })
     finally:
         current_task = asyncio.current_task()
         if current_task in active_workflow_tasks:
@@ -471,22 +585,31 @@ async def resume_workflow(
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
+        # Mappings of session_id -> list of WebSockets
+        self.active_connections: Dict[str, List[WebSocket]] = {}
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, session_id: str, websocket: WebSocket):
         await websocket.accept()
-        self.active_connections.append(websocket)
+        if session_id not in self.active_connections:
+            self.active_connections[session_id] = []
+        self.active_connections[session_id].append(websocket)
 
-    def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
+    def disconnect(self, session_id: str, websocket: WebSocket):
+        if session_id in self.active_connections:
+            self.active_connections[session_id] = [
+                ws for ws in self.active_connections[session_id] if ws != websocket
+            ]
+            if not self.active_connections[session_id]:
+                del self.active_connections[session_id]
 
-    async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            try:
-                await connection.send_text(message)
-            except Exception:
-                pass
+    async def broadcast_to_session(self, session_id: str, message: dict):
+        """Send a message directly to all websocket clients of a specific session."""
+        if session_id in self.active_connections:
+            for connection in self.active_connections[session_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    pass
 
 manager = ConnectionManager()
 
@@ -494,7 +617,7 @@ manager = ConnectionManager()
 async def websocket_endpoint(
     websocket: WebSocket,
     session_id: str,
-    api_key: str = Query(None),  # Auth via query param since WS headers are browser-restricted (Bug 13)
+    api_key: str = Query(None),
 ):
     """Stream real-time Blackboard events for a specific workflow."""
     if api_key != VALID_API_KEY:
@@ -506,33 +629,38 @@ async def websocket_endpoint(
         await websocket.close(code=1008, reason="Workflow not found")
         return
 
-    await manager.connect(websocket)
+    await manager.connect(session_id, websocket)
 
-    # Subscribe to the "blackboard" broadcast topic, which receives a copy of every
-    # agent message (Bug 11 — the old "system_events" topic had no publisher).
+    # 1. Immediately check if the workflow already failed (Re-play for new connections)
+    if state.status == "failed":
+        await manager.broadcast_to_session(session_id, {
+            "type": "notification",
+            "performative": "failure",
+            "message": "Workflow previously failed. Check your configuration."
+        })
+
+    # 2. Subscribe to the "blackboard" broadcast topic for future events.
     queue = blackboard.subscribe("blackboard")
 
     try:
         while True:
             try:
                 message: A2AMessage = await asyncio.wait_for(queue.get(), timeout=1.0)
-
-                # Reload state to pick up tasks that may have been added after connection (Bug 12).
                 current_state = await state_manager.load_state(session_id)
                 task_ids = {t.task_id for t in current_state.tasks} if current_state and current_state.tasks else set()
 
-                # Only forward events that belong to this session's tasks.
-                if message.thread_id in task_ids:
+                if message.thread_id in task_ids or message.thread_id == session_id:
                     await websocket.send_json(message.model_dump())
-
             except asyncio.TimeoutError:
-                # Heartbeat interval — keeps the connection alive and checks for client disconnect.
                 pass
 
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        manager.disconnect(session_id, websocket)
         blackboard.unsubscribe("blackboard", queue)
 
 # --- Mount Static Frontend (Served by FastAPI) ---
 # Must be registered LAST so API routes take priority over the catch-all SPA mount.
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+if os.path.exists("static"):
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+else:
+    logger.warning("static_dir_missing", message="Static directory 'static' not found. API-only mode.")

@@ -62,3 +62,23 @@ class WorkflowState(BaseModel):
     shared_memory: Dict[str, Any] = Field(default_factory=dict, description="Context shared via the blackboard")
     status: Literal["analyzing", "architecting", "executing", "completed", "failed"] = "analyzing"
     timestamp: float = 0.0
+
+# 5. Auth
+class UserSignup(BaseModel):
+    email: str
+    password: str
+    name: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    tenant_id: str

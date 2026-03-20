@@ -6,7 +6,12 @@ gunicorn
 redis
 langchain-core
 langchain-community
-ddgs
+duckduckgo-search
+wikipedia
+arxiv
+python-dotenv
+instructor
+asyncpg
 composio-openai
 structlog
 opentelemetry-api
@@ -21,3 +26,5 @@ composio
 langchain
 crewai-tools
 psycopg2-binary
+python-jose[cryptography]
+passlib[bcrypt]

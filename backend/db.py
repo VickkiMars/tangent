@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(255) PRIMARY KEY,
     tenant_id VARCHAR(255) REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(255),
-    email VARCHAR(255) UNIQUE,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    signup_ip VARCHAR(100),
     budget_limit_usd DECIMAL(10, 4) DEFAULT 100.0,
     current_spend_usd DECIMAL(10, 4) DEFAULT 0.0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -143,6 +145,43 @@ def check_budget_exceeded(user_id: str, anticipated_cost: float = 0.0) -> bool:
     except Exception as e:
         logger.error("budget_check_error", error=str(e))
         return False # Fail open in case DB fails
+
+def create_user(user_id: str, email: str, hashed_password: str, name: str, signup_ip: str, tenant_id: str = "tenant_1"):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Ensure tenant exists
+                cur.execute("INSERT INTO tenants (id, name) VALUES (%s, 'Default Org') ON CONFLICT DO NOTHING", (tenant_id,))
+                cur.execute(
+                    "INSERT INTO users (id, tenant_id, email, hashed_password, name, signup_ip) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (user_id, tenant_id, email, hashed_password, name, signup_ip)
+                )
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error("create_user_error", error=str(e))
+        return False
+
+def get_user_by_email(email: str):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+                return cur.fetchone()
+    except Exception as e:
+        logger.error("get_user_by_email_error", error=str(e))
+        return None
+
+def is_ip_restricted(ip_address: str) -> bool:
+    """Check if an account already exists with this IP."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM users WHERE signup_ip = %s", (ip_address,))
+                return cur.fetchone() is not None
+    except Exception as e:
+        logger.error("ip_check_error", error=str(e))
+        return False # Fail open to prevent locking everyone out if DB is down, but ideally should be strict
 
 def record_agent_analytics(thread_id, agent_id, target_task_id, provider, model, tokens_prompt, tokens_completion, cost, tools_called, was_successful, lifetime):
     try:
