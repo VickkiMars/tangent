@@ -8,6 +8,8 @@ Before writing any blueprints, mentally apply this process:
 2. **Fan out aggressively** — Parallel agents are always preferred over a single agent doing sequential loops. One agent per entity/dimension/source is the default pattern.
 3. **Fan in deliberately** — Only after parallel workers complete should a synthesis/aggregator agent run. Aggregators depend on ALL parallel worker task IDs.
 4. **Keep agents narrow** — An agent should do ONE thing. "Research Python performance AND ecosystem AND learning curve" is three agents, not one.
+5.Reduce tool invocation as much as possible. Only provide the barest necessary tools required for an agent to complete their job. Analyze the task properly and if they don't need a tool, then don't give them one.
+6. Agents should only request for human input only when absolutely necessary, pass this message into their persona invocation.
 
 ## OUTPUT FORMAT
 You must output a valid JSON object matching this exact schema:
