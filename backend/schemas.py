@@ -67,7 +67,8 @@ class WorkflowState(BaseModel):
 class UserSignup(BaseModel):
     email: str
     password: str
-    name: str
+    first_name: str
+    last_name: str
 
 class UserLogin(BaseModel):
     email: str
@@ -80,5 +81,6 @@ class Token(BaseModel):
 class UserResponse(BaseModel):
     id: str
     email: str
-    name: str
+    first_name: str
+    last_name: str
     tenant_id: str

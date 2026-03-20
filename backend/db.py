@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS tenants (
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(255) PRIMARY KEY,
     tenant_id VARCHAR(255) REFERENCES tenants(id) ON DELETE CASCADE,
-    name VARCHAR(255),
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
     email VARCHAR(255) UNIQUE NOT NULL,
     hashed_password VARCHAR(255) NOT NULL,
     signup_ip VARCHAR(100),
@@ -109,6 +110,9 @@ def run_schema_migrations():
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(SCHEMA_SQL)
+                # Migrate existing users table: add first_name/last_name if missing
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(255)")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)")
             conn.commit()
         logger.info("db_schema_ready")
     except Exception as e:
@@ -120,7 +124,7 @@ def ensure_tenant_user(user_id: str, tenant_id: str = "tenant_1"):
             with conn.cursor() as cur:
                 cur.execute("INSERT INTO tenants (id, name) VALUES (%s, 'Default Org') ON CONFLICT DO NOTHING", (tenant_id,))
                 cur.execute(
-                    "INSERT INTO users (id, tenant_id, name, email) VALUES (%s, %s, 'User', 'user_' || %s || '@tangent.ai') ON CONFLICT DO NOTHING",
+                    "INSERT INTO users (id, tenant_id, first_name, last_name, email) VALUES (%s, %s, 'User', '', 'user_' || %s || '@tangent.ai') ON CONFLICT DO NOTHING",
                     (user_id, tenant_id, user_id)
                 )
             conn.commit()
@@ -146,15 +150,15 @@ def check_budget_exceeded(user_id: str, anticipated_cost: float = 0.0) -> bool:
         logger.error("budget_check_error", error=str(e))
         return False # Fail open in case DB fails
 
-def create_user(user_id: str, email: str, hashed_password: str, name: str, signup_ip: str, tenant_id: str = "tenant_1"):
+def create_user(user_id: str, email: str, hashed_password: str, first_name: str, last_name: str, signup_ip: str, tenant_id: str = "tenant_1"):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 # Ensure tenant exists
                 cur.execute("INSERT INTO tenants (id, name) VALUES (%s, 'Default Org') ON CONFLICT DO NOTHING", (tenant_id,))
                 cur.execute(
-                    "INSERT INTO users (id, tenant_id, email, hashed_password, name, signup_ip) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (user_id, tenant_id, email, hashed_password, name, signup_ip)
+                    "INSERT INTO users (id, tenant_id, email, hashed_password, first_name, last_name, signup_ip) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (user_id, tenant_id, email, hashed_password, first_name, last_name, signup_ip)
                 )
             conn.commit()
             return True

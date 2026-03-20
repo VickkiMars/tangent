@@ -60,65 +60,6 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-# --- Auth Endpoints ---
-@app.post("/auth/signup", response_model=Token)
-async def signup(user: UserSignup, request: Request):
-    client_ip = request.client.host
-    
-    # Check IP restriction
-    if db.is_ip_restricted(client_ip):
-        raise HTTPException(status_code=400, detail="An account has already been created from this IP address.")
-    
-    # Check if user exists
-    if db.get_user_by_email(user.email):
-        raise HTTPException(status_code=400, detail="Email already registered.")
-    
-    user_id = f"user_{uuid.uuid4().hex[:8]}"
-    hashed_pwd = get_password_hash(user.password)
-    
-    success = db.create_user(
-        user_id=user_id,
-        email=user.email,
-        hashed_password=hashed_pwd,
-        name=user.name,
-        signup_ip=client_ip
-    )
-    
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to create user.")
-    
-    access_token = create_access_token(data={"sub": user.email, "user_id": user_id})
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.post("/auth/login", response_model=Token)
-async def login(user: UserLogin):
-    db_user = db.get_user_by_email(user.email)
-    if not db_user or not verify_password(user.password, db_user["hashed_password"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password.")
-    
-    access_token = create_access_token(data={"sub": db_user["email"], "user_id": db_user["id"]})
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.get("/auth/me", response_model=UserResponse)
-async def get_me(token: str = Query(...)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise HTTPException(status_code=401, detail="Invalid token.")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token.")
-    
-    db_user = db.get_user_by_email(email)
-    if not db_user:
-        raise HTTPException(status_code=401, detail="User not found.")
-    
-    return {
-        "id": db_user["id"],
-        "email": db_user["email"],
-        "name": db_user["name"],
-        "tenant_id": db_user["tenant_id"]
-    }
 
 def clean_error_message(e: Exception) -> str:
     """Translate technical stack traces into user-friendly notifications."""
@@ -228,6 +169,7 @@ load_dynamic_tools(registry)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    db.run_schema_migrations()
     yield
     # Cancel active tasks to prevent hanging on shutdown
     if active_workflow_tasks:
@@ -259,6 +201,66 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Auth Endpoints ---
+@app.post("/auth/signup", response_model=Token)
+async def signup(user: UserSignup, request: Request):
+    client_ip = request.client.host
+
+    if db.is_ip_restricted(client_ip):
+        raise HTTPException(status_code=400, detail="An account has already been created from this IP address.")
+
+    if db.get_user_by_email(user.email):
+        raise HTTPException(status_code=400, detail="Email already registered.")
+
+    user_id = f"user_{uuid.uuid4().hex[:8]}"
+    hashed_pwd = get_password_hash(user.password)
+
+    success = db.create_user(
+        user_id=user_id,
+        email=user.email,
+        hashed_password=hashed_pwd,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        signup_ip=client_ip
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to create user.")
+
+    access_token = create_access_token(data={"sub": user.email, "user_id": user_id})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/auth/login", response_model=Token)
+async def login(user: UserLogin):
+    db_user = db.get_user_by_email(user.email)
+    if not db_user or not verify_password(user.password, db_user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    access_token = create_access_token(data={"sub": db_user["email"], "user_id": db_user["id"]})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/auth/me", response_model=UserResponse)
+async def get_me(token: str = Query(...)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="Invalid token.")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token.")
+
+    db_user = db.get_user_by_email(email)
+    if not db_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    return {
+        "id": db_user["id"],
+        "email": db_user["email"],
+        "first_name": db_user["first_name"] or "",
+        "last_name": db_user["last_name"] or "",
+        "tenant_id": db_user["tenant_id"]
+    }
 
 # --- Security ---
 API_KEY_NAME = "X-API-Key"
