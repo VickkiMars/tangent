@@ -34,7 +34,6 @@ CREATE TABLE IF NOT EXISTS users (
     last_name VARCHAR(255),
     email VARCHAR(255) UNIQUE NOT NULL,
     hashed_password VARCHAR(255) NOT NULL,
-    signup_ip VARCHAR(100),
     budget_limit_usd DECIMAL(10, 4) DEFAULT 100.0,
     current_spend_usd DECIMAL(10, 4) DEFAULT 0.0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -114,7 +113,7 @@ def run_schema_migrations():
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(255)")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255)")
-                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_ip VARCHAR(100)")
+                cur.execute("ALTER TABLE users DROP COLUMN IF EXISTS signup_ip")
             conn.commit()
         logger.info("db_schema_ready")
     except Exception as e:
@@ -152,15 +151,15 @@ def check_budget_exceeded(user_id: str, anticipated_cost: float = 0.0) -> bool:
         logger.error("budget_check_error", error=str(e))
         return False # Fail open in case DB fails
 
-def create_user(user_id: str, email: str, hashed_password: str, first_name: str, last_name: str, signup_ip: str, tenant_id: str = "tenant_1"):
+def create_user(user_id: str, email: str, hashed_password: str, first_name: str, last_name: str, tenant_id: str = "tenant_1"):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 # Ensure tenant exists
                 cur.execute("INSERT INTO tenants (id, name) VALUES (%s, 'Default Org') ON CONFLICT DO NOTHING", (tenant_id,))
                 cur.execute(
-                    "INSERT INTO users (id, tenant_id, email, hashed_password, first_name, last_name, signup_ip) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                    (user_id, tenant_id, email, hashed_password, first_name, last_name, signup_ip)
+                    "INSERT INTO users (id, tenant_id, email, hashed_password, first_name, last_name) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (user_id, tenant_id, email, hashed_password, first_name, last_name)
                 )
             conn.commit()
             return True
@@ -178,16 +177,6 @@ def get_user_by_email(email: str):
         logger.error("get_user_by_email_error", error=str(e))
         return None
 
-def is_ip_restricted(ip_address: str) -> bool:
-    """Check if an account already exists with this IP."""
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM users WHERE signup_ip = %s", (ip_address,))
-                return cur.fetchone() is not None
-    except Exception as e:
-        logger.error("ip_check_error", error=str(e))
-        return False # Fail open to prevent locking everyone out if DB is down, but ideally should be strict
 
 def record_agent_analytics(thread_id, agent_id, target_task_id, provider, model, tokens_prompt, tokens_completion, cost, tools_called, was_successful, lifetime):
     try:
