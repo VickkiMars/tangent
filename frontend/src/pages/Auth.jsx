@@ -31,8 +31,8 @@ const Auth = () => {
       const data = isLogin
         ? await authLogin(email, password)
         : await authSignup(email, password, firstName, lastName);
-      login(data.access_token);
-      navigate('/workspace');
+      await login(data.access_token);
+      navigate('/chat');
     } catch (err) {
       notify(err.message || 'Connection failed. Please check your network.', 'error');
     } finally {
