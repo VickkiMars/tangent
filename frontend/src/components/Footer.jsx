@@ -6,7 +6,7 @@ const Footer = () => {
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-3 sm:gap-4 text-sm text-text-tertiary">
         <div className="flex items-center gap-2 text-white">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 22h20L12 2z" fill="currentColor"/></svg>
-          <span className="font-bold">Nagent</span>
+          <span className="font-bold">Tangent</span>
         </div>
         <p>© 2026 Tangent All Rights Reserved.</p>
         <div className="flex gap-4">
