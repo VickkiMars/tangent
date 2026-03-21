@@ -11,7 +11,7 @@ load_dotenv()
 
 import structlog
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Query, Request
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Query
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -205,12 +205,7 @@ app.add_middleware(
 
 # --- Auth Endpoints ---
 @app.post("/auth/signup", response_model=Token)
-async def signup(user: UserSignup, request: Request):
-    client_ip = request.client.host
-
-    if db.is_ip_restricted(client_ip):
-        raise HTTPException(status_code=400, detail="An account has already been created from this IP address.")
-
+async def signup(user: UserSignup):
     if db.get_user_by_email(user.email):
         raise HTTPException(status_code=400, detail="Email already registered.")
 
@@ -223,7 +218,6 @@ async def signup(user: UserSignup, request: Request):
         hashed_password=hashed_pwd,
         first_name=user.first_name,
         last_name=user.last_name,
-        signup_ip=client_ip
     )
 
     if not success:
