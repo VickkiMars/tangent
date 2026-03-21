@@ -1,5 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL;
+const WS_URL = import.meta.env.VITE_WS_URL;
 
 // NOTE: This is the access token for the N-Agent Backend, NOT the Gemini/OpenAI key.
 // The actual LLM keys are stored securely on the server side.
