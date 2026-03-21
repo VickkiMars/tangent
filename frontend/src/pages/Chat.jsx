@@ -14,6 +14,11 @@ const API_URL = import.meta.env.VITE_API_URL || "";
 const API_KEY = import.meta.env.VITE_API_KEY || "nagent-dev-key";
 const WS_URL  = import.meta.env.VITE_WS_URL  || "";
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const STATUS_MAP = {
   completed: { color: '#10B981', label: 'Completed' },
@@ -228,7 +233,7 @@ export default function Chat() {
   useEffect(() => {
     const fetchSessions = async () => {
       try {
-        const res = await fetch(`${API_URL}/workflows`, { headers: { 'X-API-Key': API_KEY } });
+        const res = await fetch(`${API_URL}/workflows`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           const loadedSessions = data.map(d => ({
@@ -251,7 +256,7 @@ export default function Chat() {
     if (activeId && !eventMap[activeId]) {
       const fetchHistory = async () => {
         try {
-          const res = await fetch(`${API_URL}/workflows/${activeId}`, { headers: { 'X-API-Key': API_KEY } });
+          const res = await fetch(`${API_URL}/workflows/${activeId}`, { headers: getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
             setEventMap(prev => ({ ...prev, [activeId]: data.logs || [] }));
@@ -293,7 +298,7 @@ export default function Chat() {
     try {
       const res = await fetch(`${API_URL}/workflows`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ objective: text, provider, model }),
         signal: controller.signal,
       });
@@ -326,7 +331,7 @@ export default function Chat() {
     try {
       await fetch(`${API_URL}/workflows/${activeId}/input`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ task_id: taskId, input }),
       });
     } catch (err) {

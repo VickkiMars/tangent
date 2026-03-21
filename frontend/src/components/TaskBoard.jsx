@@ -90,6 +90,11 @@ const API_URL = import.meta.env.VITE_API_URL || "";
 const WS_URL  = import.meta.env.VITE_WS_URL  || "";
 const API_KEY  = import.meta.env.VITE_API_KEY || 'nagent-dev-key';
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+};
+
 // ─── TaskBoard ────────────────────────────────────────────────────────────────
 const TaskBoard = ({ defaultTaskId = null }) => {
   const [selectedId, setSelectedId]         = useState(defaultTaskId);
@@ -108,7 +113,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
   useEffect(() => {
     const fetchThreads = async () => {
       try {
-        const res = await fetch(`${API_URL}/workflows`, { headers: { 'X-API-Key': API_KEY } });
+        const res = await fetch(`${API_URL}/workflows`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           const loadedThreads = data.map(d => ({
@@ -140,7 +145,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
     const fetchData = async () => {
       try {
         const res = await fetch(`${API_URL}/workflows/${selectedId}`, {
-          headers: { 'X-API-Key': API_KEY }
+          headers: getAuthHeaders()
         });
         if (res.ok) {
           const data = await res.json();
@@ -202,7 +207,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': API_KEY
+          ...getAuthHeaders()
         },
         body: JSON.stringify({ task_id: evt.task_id, input: draft })
       });

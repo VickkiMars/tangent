@@ -56,6 +56,7 @@ class A2AMessage(BaseModel):
 class WorkflowState(BaseModel):
     session_id: str
     tenant_id: str = "tenant_1"
+    user_id: str = "default"
     original_objective: str
     tasks: List[SubTask]
     manifest: Optional[SynthesisManifest] = None

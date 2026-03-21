@@ -5,12 +5,17 @@ const WS_URL = (import.meta.env.VITE_WS_URL || "").replace(/\/$/, '');
 // The actual LLM keys are stored securely on the server side.
 const BACKEND_ACCESS_TOKEN = import.meta.env.VITE_API_KEY || "nagent-dev-key";
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return token ? { "Authorization": `Bearer ${token}` } : {};
+};
+
 export const submitWorkflow = async (objective, provider = "google", model = "gemini-1.5-flash") => {
   const response = await fetch(`${API_URL}/workflows`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": BACKEND_ACCESS_TOKEN,
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ objective, provider, model }),
   });
@@ -20,9 +25,7 @@ export const submitWorkflow = async (objective, provider = "google", model = "ge
 
 export const getWorkflowState = async (sessionId) => {
   const response = await fetch(`${API_URL}/workflows/${sessionId}`, {
-    headers: {
-      "X-API-Key": BACKEND_ACCESS_TOKEN,
-    },
+    headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error("Failed to fetch workflow state");
   return response.json();
@@ -30,9 +33,7 @@ export const getWorkflowState = async (sessionId) => {
 
 export const getCostsSummary = async () => {
   const response = await fetch(`${API_URL}/analytics/costs/summary`, {
-    headers: {
-      "X-API-Key": BACKEND_ACCESS_TOKEN,
-    },
+    headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error("Failed to fetch costs summary");
   return response.json();

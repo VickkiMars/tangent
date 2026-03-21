@@ -11,7 +11,7 @@ load_dotenv()
 
 import structlog
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Query, Header
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -263,14 +263,21 @@ VALID_API_KEY = os.getenv("API_KEY", "nagent-dev-key")
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 def get_current_user(
-    api_key: str = Depends(api_key_header),
-    api_key_query: str = Query(None, alias="api_key")
+    authorization: str = Header(None),
 ):
-    """Basic API Key user management/auth."""
-    key = api_key or api_key_query
-    if key == VALID_API_KEY:
-        return {"user_id": "dev_user"}
-    raise HTTPException(status_code=403, detail="Invalid API Key. Please provide X-API-Key header or api_key query param.")
+    """JWT-based user auth. Expects 'Authorization: Bearer <token>' header."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated. Provide Authorization: Bearer <token> header.")
+    token = authorization[7:]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("user_id")
+        email: str = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token.")
+        return {"user_id": user_id, "email": email}
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token.")
 
 # --- Models ---
 class WorkflowRequest(BaseModel):
@@ -483,6 +490,7 @@ async def submit_workflow(
     # Initialize state
     initial_state = WorkflowState(
         session_id=session_id,
+        user_id=user["user_id"],
         original_objective=request.objective,
         tasks=[],
         status="analyzing",
@@ -502,8 +510,8 @@ async def submit_workflow(
 
 @app.get("/workflows")
 async def list_workflows(user: dict = Depends(get_current_user)):
-    """List all workflow states for the current user's tenant."""
-    workflows = await state_manager.list_workflows("tenant_1")
+    """List all workflow states for the current user."""
+    workflows = await state_manager.list_workflows("tenant_1", user_id=user["user_id"])
     return workflows
 
 @app.get("/workflows/{session_id}")
@@ -512,6 +520,8 @@ async def get_workflow(session_id: str, user: dict = Depends(get_current_user)):
     state = await state_manager.load_state(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if state.user_id != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     # Filter blackboard history to only include messages belonging to this workflow's
     # tasks, not the global history of all workflows (Bug 15).
@@ -540,6 +550,8 @@ async def submit_human_input(
     state = await state_manager.load_state(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if state.user_id != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     task_ids = {t.task_id for t in state.tasks}
     if request.task_id not in task_ids:
@@ -570,7 +582,9 @@ async def resume_workflow(
     state = await state_manager.load_state(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Workflow not found")
-        
+    if state.user_id != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     if state.status not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Cannot resume an active workflow")
     
