@@ -32,8 +32,8 @@ class StateManager:
             state.status = status
             await self.save_state(state)
 
-    async def list_workflows(self, tenant_id: str = "tenant_1") -> list:
-        """Lists all workflow states for a given tenant."""
+    async def list_workflows(self, tenant_id: str = "tenant_1", user_id: Optional[str] = None) -> list:
+        """Lists workflow states for a given tenant, optionally filtered by user_id."""
         pattern = f"{tenant_id}:workflow:*"
         keys = await self.redis_client.keys(pattern)
         if not keys:
@@ -43,7 +43,8 @@ class StateManager:
         for state_json in states_json:
             if state_json:
                 data = json.loads(state_json)
-                workflows.append(data)
+                if user_id is None or data.get('user_id') == user_id:
+                    workflows.append(data)
         workflows.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
         return workflows
 
