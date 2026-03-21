@@ -113,6 +113,8 @@ def run_schema_migrations():
                 # Migrate existing users table: add first_name/last_name if missing
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(255)")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255)")
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_ip VARCHAR(100)")
             conn.commit()
         logger.info("db_schema_ready")
     except Exception as e:

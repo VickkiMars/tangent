@@ -6,6 +6,9 @@ import time
 from contextlib import asynccontextmanager
 from typing import Dict, Any, List
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import structlog
 from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Query, Request
@@ -13,7 +16,7 @@ from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from passlib.context import CryptContext
+import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 
@@ -45,13 +48,11 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "tangent-super-secret-key-000")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 def create_access_token(data: dict):
     to_encode = data.copy()
