@@ -50,9 +50,9 @@ const Notification = () => {
           <div style={{
             padding: '16px',
             borderRadius: '16px',
-            background: notification.type === 'error' ? 'rgba(30, 0, 0, 0.9)' : 'rgba(0, 5, 20, 0.9)',
-            border: `1px solid ${notification.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(0, 102, 255, 0.3)'}`,
-            color: notification.type === 'error' ? '#EF4444' : '#0066FF',
+            background: notification.type === 'error' ? 'rgba(30, 0, 0, 0.9)' : notification.type === 'warning' ? 'rgba(20, 12, 0, 0.9)' : 'rgba(0, 5, 20, 0.9)',
+            border: `1px solid ${notification.type === 'error' ? 'rgba(239, 68, 68, 0.3)' : notification.type === 'warning' ? 'rgba(245, 158, 11, 0.3)' : 'rgba(0, 102, 255, 0.3)'}`,
+            color: notification.type === 'error' ? '#EF4444' : notification.type === 'warning' ? '#F59E0B' : '#0066FF',
             backdropFilter: 'blur(12px)',
             boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
             display: 'flex',
@@ -63,6 +63,10 @@ const Notification = () => {
               {notification.type === 'error' ? (
                 <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ) : notification.type === 'warning' ? (
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                 </svg>
               ) : (
                 <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -78,7 +82,7 @@ const Notification = () => {
                 textTransform: 'uppercase', 
                 letterSpacing: '0.05em' 
               }}>
-                {notification.type === 'error' ? 'Critical System Error' : 'System Notification'}
+                {notification.type === 'error' ? 'Error' : notification.type === 'warning' ? 'Sign In Required' : 'Notification'}
               </h4>
               <p style={{ 
                 margin: 0, 

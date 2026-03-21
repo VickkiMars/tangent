@@ -11,6 +11,7 @@ import Chat from './pages/Chat';
 import Builder from './pages/Builder';
 import Auth from './pages/Auth';
 import Notification from './components/Notification';
+import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import './App.css';
 
@@ -21,13 +22,13 @@ function App() {
         <Layout>
           <Routes>
           <Route path="/" element={<Landing />} />
-          <Route path="/workspace" element={<Workspace />} />
-          <Route path="/builder" element={<Builder />} />
-          <Route path="/tasks" element={<TaskView />} />
-          <Route path="/history" element={<History />} />
+          <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+          <Route path="/builder" element={<ProtectedRoute><Builder /></ProtectedRoute>} />
+          <Route path="/tasks" element={<ProtectedRoute><TaskView /></ProtectedRoute>} />
+          <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
+          <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/docs" element={<Docs />} />
-          <Route path="/chat" element={<Chat />} />
           <Route path="/login" element={<Auth />} />
           <Route path="/signup" element={<Auth />} />
         </Routes>

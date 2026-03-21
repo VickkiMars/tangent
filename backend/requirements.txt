@@ -6,7 +6,7 @@ gunicorn
 redis
 langchain-core
 langchain-community
-duckduckgo-search
+ddgs
 wikipedia
 arxiv
 python-dotenv

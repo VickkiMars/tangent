@@ -179,7 +179,7 @@ function EmptyState({ onQuickStart }) {
           <Zap size={32} className="text-white" />
         </div>
       </div>
-      <h2 className="text-2xl font-bold text-white mb-3 tracking-tight">Deploy your first workflow</h2>
+      <h2 className="text-2xl font-bold text-white mb-3 tracking-tight">Create your first workflow</h2>
       <p className="text-[#A1A1AA] text-sm max-w-sm leading-relaxed mb-10">
         Describe a complex objective. Tangent will architect, spawn, and orchestrate
         specialist AI agents to complete it — then dissolve without a trace.
@@ -340,19 +340,19 @@ export default function Chat() {
 
   return (
     /* Escape Layout padding to get full-height split pane */
-    <div className="-mx-4 sm:-mx-6 -mt-4 sm:-mt-8 flex h-[calc(100dvh-4.5rem)] sm:h-[calc(100vh-5.5rem)] overflow-hidden font-sans relative">
+    <div className="-mx-4 sm:-mx-6 flex h-[calc(100dvh-12rem)] md:h-[calc(100vh-8rem)] overflow-hidden font-sans relative">
 
       {/* Mobile backdrop */}
       {showSidebar && (
         <div
-          className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
+          className="md:hidden fixed inset-0 bg-black/60 z-[120] backdrop-blur-sm"
           onClick={() => setShowSidebar(false)}
         />
       )}
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside className={`
-        fixed md:relative top-0 left-0 h-full z-50 md:z-auto
+        fixed md:relative top-0 left-0 h-full z-[130] md:z-auto
         w-[280px] sm:w-72 flex-shrink-0 flex flex-col
         border-r border-white/[0.06] bg-[#050505]
         transition-transform duration-300 ease-in-out
