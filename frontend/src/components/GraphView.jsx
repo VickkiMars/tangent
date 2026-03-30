@@ -257,8 +257,8 @@ function workflowToGraph(tasks, manifest, analytics) {
       id: t.task_id,
       type: 'agent',
       data: {
-        agent_id: bp.agent_id || t.task_id,
-        label: bp.target_task_id || t.task_id,
+        agent_id: bp.agent_id || t.task_id.split(':').slice(1).join(':') || t.task_id,
+        label: (bp.target_task_id || t.task_id).split(':').slice(1).join(':') || (bp.target_task_id || t.task_id),
         status: a ? 'completed' : (t.status || 'pending'),
         tools: bp.injected_tools || t.required_capabilities || [],
         persona_prompt: bp.persona_prompt || "",

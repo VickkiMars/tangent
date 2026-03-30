@@ -8,7 +8,7 @@ class SubTask(BaseModel):
     required_capabilities: List[str] = Field(description="Specific skills or tools needed")
     dependencies: List[str] = Field(default_factory=list, description="IDs of tasks that must complete before this begins")
     provider: Literal["openai", "anthropic", "google"] = Field(default="google", description="The LLM provider to use for this task")
-    model: str = Field(default="gemini-3-flash", description="The specific LLM model to use")
+    model: str = Field(default="gemini-3.1-flash-lite-preview", description="The specific LLM model to use")
 
 # 2. JIT Compilation
 class AgentBlueprint(BaseModel):
@@ -17,16 +17,16 @@ class AgentBlueprint(BaseModel):
     agent_type: Literal["ephemeral", "daemon"] = Field(default="ephemeral", description="Type of the agent: ephemeral or daemon")
     persona_prompt: str = Field(description="Highly specific instructions generated JIT for this task")
     injected_tools: List[str] = Field(description="Strictly bound functions for this ephemeral instance")
-    temperature: float = Field(default=0.2, description="Task-specific creativity level")
+    temperature: float = Field(default=1.0, description="Task-specific creativity level")
     termination_condition: str = Field(description="Deterministic criteria for the agent to post results and self-destruct")
     include_history: bool = Field(default=False, description="Whether to include thread history in the context")
     history_limit: Optional[int] = Field(default=None, description="Maximum number of historical messages to include")
     provider: Literal["openai", "anthropic", "google"] = Field(default="google", description="The LLM provider to use")
-    model: str = Field(default="gemini-3-flash", description="The specific LLM model to use")
+    model: str = Field(default="gemini-3.1-flash-lite-preview", description="The specific LLM model to use")
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids this agent depends on")
 
 class SynthesisManifest(BaseModel):
-    session_id: str
+    session_id: str = Field(default="", description="Populated by the server after architect_workflow returns")
     blueprints: List[AgentBlueprint] = Field(description="The exact list of agents being JIT compiled")
 
 

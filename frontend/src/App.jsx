@@ -10,6 +10,7 @@ import Docs from './pages/Docs';
 import Chat from './pages/Chat';
 import Builder from './pages/Builder';
 import Auth from './pages/Auth';
+import MarketingScreenshot from './pages/MarketingScreenshot';
 import Notification from './components/Notification';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -27,6 +28,7 @@ function App() {
           <Route path="/tasks" element={<ProtectedRoute><TaskView /></ProtectedRoute>} />
           <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
           <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+          <Route path="/marketing" element={<MarketingScreenshot />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/login" element={<Auth />} />

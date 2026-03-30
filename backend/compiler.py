@@ -29,6 +29,30 @@ class JITCompiler:
         self.listener_task = None
         self.agent_tasks: set = set()
         self.hibernated_task_ids: set = set()
+        self._user_id: str = "dev_user"
+        self._tenant_id: str = "tenant_1"
+
+    @staticmethod
+    def _normalize_message(msg) -> dict:
+        """Convert a LiteLLM response message to a plain dict, stripping provider-specific fields
+        from tool_calls to avoid Pydantic serialization warnings on the next LLM call."""
+        d = {"role": msg.role, "content": msg.content}
+        tool_calls = getattr(msg, "tool_calls", None)
+        if tool_calls:
+            d["tool_calls"] = [
+                {
+                    "id": (tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", "")) or "",
+                    "type": "function",
+                    "function": {
+                        "name": (tc.get("function", {}).get("name") if isinstance(tc, dict)
+                                 else getattr(getattr(tc, "function", None), "name", "")) or "",
+                        "arguments": (tc.get("function", {}).get("arguments") if isinstance(tc, dict)
+                                      else getattr(getattr(tc, "function", None), "arguments", "{}")) or "{}"
+                    }
+                }
+                for tc in tool_calls
+            ]
+        return d
 
     async def unblock_agent(self, task_id: str, human_input: str):
         """Publishes a message to the blackboard to unblock a hibernated agent."""
@@ -77,13 +101,15 @@ class JITCompiler:
         except asyncio.CancelledError:
             self.blackboard.unsubscribe("unblock_agent", queue)
 
-    async def execute_manifest(self, manifest: SynthesisManifest, tasks: List[SubTask]):
+    async def execute_manifest(self, manifest: SynthesisManifest, tasks: List[SubTask], user_id: str = "dev_user", tenant_id: str = "tenant_1"):
         """Compiles and launches all agents concurrently."""
         self.manifest = manifest
         self.tasks = tasks
         self.task_lookup = {task.task_id: task for task in tasks}
         self.agent_tasks = set()
         self.hibernated_task_ids = set()
+        self._user_id = user_id
+        self._tenant_id = tenant_id
 
         self.listener_task = asyncio.create_task(self.start_resume_listener(manifest, tasks))
 
@@ -166,8 +192,8 @@ class JITCompiler:
 
                         llm_response = await llm_provider.generate(**kwargs)
                         response_message = llm_response.choices[0].message
-                        messages.append(response_message)
-                        
+                        messages.append(self._normalize_message(response_message))
+
                         # Handle tool calls for daemons (simplified)
                         if response_message.tool_calls:
                             for call in response_message.tool_calls:
@@ -339,7 +365,7 @@ class JITCompiler:
             tools_used = []
             
             # Pre-flight budget check
-            if await asyncio.to_thread(check_budget_exceeded, "dev_user", 0.0):
+            if await asyncio.to_thread(check_budget_exceeded, self._user_id, 0.0):
                 logger.warning("budget_exceeded", user="dev_user", agent_id=agent_id)
                 final_response_text = "ERROR: User budget exceeded. Execution paused."
                 messages.append({"role": "assistant", "content": final_response_text})
@@ -373,8 +399,16 @@ class JITCompiler:
                     if llm_tool_schemas:
                         kwargs["tools"] = llm_tool_schemas
 
+                    logger.info(
+                        "llm_input",
+                        agent_id=agent_id,
+                        task_id=task.task_id,
+                        provider=provider_name,
+                        model=model_name,
+                        messages=messages,
+                    )
                     llm_response = await llm_provider.generate(**kwargs)
-                    
+
                     # Accumulate Cost
                     try:
                         cost = completion_cost(completion_response=llm_response)
@@ -383,7 +417,7 @@ class JITCompiler:
                         completion_tokens += getattr(llm_response.usage, 'completion_tokens', 0)
                         
                         # Check budget mid-flight
-                        if await asyncio.to_thread(check_budget_exceeded, "dev_user", cost):
+                        if await asyncio.to_thread(check_budget_exceeded, self._user_id, cost):
                             logger.warning("budget_exceeded_mid_flight", user="dev_user", agent_id=agent_id)
                             final_response_text = "ERROR: User budget exceeded during execution."
                             break
@@ -391,7 +425,21 @@ class JITCompiler:
                         logger.error("cost_calculation_failed", error=str(e))
                         
                     response_message = llm_response.choices[0].message
-                    messages.append(response_message)
+                    messages.append(self._normalize_message(response_message))
+
+                    logger.info(
+                        "llm_output",
+                        agent_id=agent_id,
+                        task_id=task.task_id,
+                        content=response_message.content,
+                        tool_calls=[
+                            {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            }
+                            for tc in (response_message.tool_calls or [])
+                        ],
+                    )
 
                     if response_message.tool_calls:
                         for call in response_message.tool_calls:
@@ -481,11 +529,12 @@ class JITCompiler:
                             # Execute the bound function pointer
                             try:
                                 func_args = json.loads(call.function.arguments)
+                                logger.info("tool_input", agent_id=agent_id, tool_name=func_name, arguments=func_args)
                                 tool_result = bound_tools[func_name](**func_args)
                                 if inspect.iscoroutine(tool_result):
                                     tool_result = await tool_result
                                 result_str = json.dumps(tool_result)
-                                logger.info("tool_executed", agent_id=agent_id, tool_name=func_name)
+                                logger.info("tool_output", agent_id=agent_id, tool_name=func_name, result=tool_result)
                             except Exception as e:
                                 result_str = f"Tool execution failed: {str(e)}"
                                 logger.error("tool_execution_failed", agent_id=agent_id, tool_name=func_name, error=str(e))
@@ -536,9 +585,10 @@ class JITCompiler:
             # 5. POST-PROCESSING & ANALYTICS
             lifetime = time.time() - start_time
             await asyncio.to_thread(
-                record_agent_analytics, 
+                record_agent_analytics,
                 task.task_id, agent_id, task.task_id, getattr(blueprint, "provider", "openai"), getattr(blueprint, "model", "gpt-4o"),
-                prompt_tokens, completion_tokens, total_cost, tools_used, True, lifetime
+                prompt_tokens, completion_tokens, total_cost, tools_used, True, lifetime,
+                self._user_id, self._tenant_id
             )
 
             logger.info("agent_terminated", agent_id=agent_id, task_id=task.task_id, status="success")
