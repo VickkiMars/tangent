@@ -217,10 +217,11 @@ export default function Chat() {
   const [demoMode,     setDemoMode]     = useState(false);
   const [showSidebar,  setShowSidebar]  = useState(false);
 
-  const wsRef       = useRef(null);
-  const scrollRef   = useRef(null);
-  const textareaRef = useRef(null);
-  const navigate    = useNavigate();
+  const wsRef            = useRef(null);
+  const scrollRef        = useRef(null);
+  const textareaRef      = useRef(null);
+  const newSessionIds    = useRef(new Set());
+  const navigate         = useNavigate();
 
   // Auto-scroll
   useEffect(() => {
@@ -253,7 +254,7 @@ export default function Chat() {
 
   // Fetch history for active session if not populated
   useEffect(() => {
-    if (activeId && !eventMap[activeId]) {
+    if (activeId && !newSessionIds.current.has(activeId) && !eventMap[activeId]) {
       const fetchHistory = async () => {
         try {
           const res = await fetch(`${API_URL}/workflows/${activeId}`, { headers: getAuthHeaders() });
@@ -270,6 +271,10 @@ export default function Chat() {
   }, [activeId]);
 
   const connectWS = useCallback((sessionId) => {
+    if (wsRef.current) {
+      wsRef.current.onmessage = null;
+      wsRef.current.close();
+    }
     const wsUrl = WS_URL || `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
     const ws = new WebSocket(
       `${wsUrl}/workflows/${sessionId}/events?api_key=${API_KEY}`
@@ -283,10 +288,22 @@ export default function Chat() {
         setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, status: 'failed' } : s));
         const errorText = msg.type === 'notification' ? msg.message : msg.payload?.natural_language;
         notify(errorText || 'A fatal workflow error occurred', 'error', 10000);
+      } else if (msg.performative === 'completed') {
+        setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, status: 'completed' } : s));
       }
     };
     ws.onerror = () => ws.close();
     wsRef.current = ws;
+  }, []);
+
+  // Close WS on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.onmessage = null;
+        wsRef.current.close();
+      }
+    };
   }, []);
 
   const submitObjective = async () => {
@@ -310,6 +327,7 @@ export default function Chat() {
         status: 'analyzing',
         ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
+      newSessionIds.current.add(data.session_id);
       setSessions(prev => [session, ...prev]);
       setEventMap(prev => ({ ...prev, [data.session_id]: [] }));
       setActiveId(data.session_id);
@@ -485,13 +503,22 @@ export default function Chat() {
         </div>
 
         {/* Objective input bar */}
-        <div className="flex-shrink-0 px-4 sm:px-8 py-4 sm:py-5 border-t border-white/[0.06] bg-black/80 backdrop-blur-xl">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-end gap-3 bg-[#0E0E0E] border border-white/10 rounded-[20px] px-5 py-4 focus-within:border-white/30 transition-colors shadow-lg shadow-black/30">
-              <div className="relative flex flex-col justify-end mb-1">
+        <div className="flex-shrink-0 px-4 sm:px-8 py-4 sm:py-5 border-t border-white/[0.06] bg-[#000]/90 backdrop-blur-xl">
+          <div className="max-w-3xl mx-auto">
+            <div className="relative rounded-[20px] bg-[#141414] border border-white/[0.08] focus-within:border-white/[0.18] transition-all duration-200 shadow-[0_4px_24px_rgba(0,0,0,0.5)] focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.04),0_4px_24px_rgba(0,0,0,0.5)]">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={objective}
+                onChange={e => setObjective(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitObjective(); } }}
+                placeholder="How can Tangent help you today?"
+                className="w-full resize-none bg-transparent text-sm text-white placeholder-[#4A4A4A] focus:outline-none leading-relaxed max-h-36 overflow-y-auto px-5 pt-4 pb-14"
+              />
+              <div className="absolute bottom-0 left-0 right-0 px-3 pb-3 flex items-center justify-between">
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-2.5 flex items-center pointer-events-none">
-                    <Sparkles size={11} className="text-[#FF8A00]" />
+                    <Sparkles size={10} className="text-[#FF8A00]/70" />
                   </div>
                   <select
                     value={`${provider}:${model}`}
@@ -500,43 +527,33 @@ export default function Chat() {
                       setProvider(p);
                       setModel(m);
                     }}
-                    className="appearance-none bg-black/40 border border-white/[0.06] hover:border-white/20 text-[#E2E8F0] hover:text-white text-[11px] font-medium rounded-[10px] pl-7 pr-8 py-2 outline-none transition-all duration-300 cursor-pointer focus:border-[#FF8A00]/50 focus:ring-1 focus:ring-[#FF8A00]/30"
+                    className="appearance-none bg-transparent hover:bg-white/[0.04] text-[#555] hover:text-[#999] text-[11px] font-medium rounded-lg pl-6 pr-6 py-1.5 outline-none transition-all duration-200 cursor-pointer"
                   >
-                    <option value="google:gemini-3.1-flash-lite-preview" className="bg-[#0E0E0E] text-white">Gemini 3.1 Flash Lite</option>
-                    <option value="openai:gpt-4o" className="bg-[#0E0E0E] text-white">GPT-4o</option>
-                    <option value="anthropic:claude-3-5-sonnet-latest" className="bg-[#0E0E0E] text-white">Claude 3.5 Sonnet</option>
+                    <option value="google:gemini-3.1-flash-lite-preview" className="bg-[#141414] text-white">Gemini 3.1 Flash Lite</option>
+                    <option value="openai:gpt-4o" className="bg-[#141414] text-white">GPT-4o</option>
+                    <option value="anthropic:claude-3-5-sonnet-latest" className="bg-[#141414] text-white">Claude 3.5 Sonnet</option>
                   </select>
-                  <div className="absolute inset-y-0 right-2.5 flex items-center pointer-events-none">
-                    <ChevronDown size={11} className="text-[#71717A] group-hover:text-[#FF8A00] transition-colors duration-300" />
+                  <div className="absolute inset-y-0 right-1.5 flex items-center pointer-events-none">
+                    <ChevronDown size={9} className="text-[#444] group-hover:text-[#777] transition-colors duration-200" />
                   </div>
                 </div>
+                <button
+                  onClick={submitObjective}
+                  disabled={!objective.trim() || submitting}
+                  className="flex items-center justify-center w-8 h-8 rounded-[10px] transition-all duration-200 disabled:cursor-not-allowed"
+                  style={{
+                    background: objective.trim() && !submitting ? '#FF8A00' : 'rgba(255,255,255,0.06)',
+                    boxShadow: objective.trim() && !submitting ? '0 0 16px rgba(255,138,0,0.35)' : 'none',
+                  }}
+                >
+                  {submitting
+                    ? <Loader size={14} className="animate-spin text-white" />
+                    : <Send size={14} className={objective.trim() ? 'text-black' : 'text-[#444]'} style={{ transform: 'translate(1px, -1px)' }} />
+                  }
+                </button>
               </div>
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={objective}
-                onChange={e => setObjective(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitObjective(); } }}
-                placeholder="Describe your objective — Tangent will architect the workflow…"
-                className="flex-grow resize-none bg-transparent text-sm text-white placeholder-[#71717A] focus:outline-none leading-relaxed max-h-36 overflow-y-auto"
-              />
-              <button
-                onClick={submitObjective}
-                disabled={!objective.trim() || submitting}
-                className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full transition-all duration-300 disabled:opacity-30"
-                style={{
-                  background: objective.trim() && !submitting
-                    ? 'white'
-                    : '#1A1A1A',
-                }}
-              >
-                {submitting
-                  ? <Loader size={15} className="animate-spin text-white" />
-                  : <Send size={15} className={objective.trim() ? 'text-black' : 'text-[#71717A]'} />
-                }
-              </button>
             </div>
-            <p className="text-center text-[10px] text-[#71717A] mt-2.5 font-mono">
+            <p className="text-center text-[10px] text-[#2A2A2A] mt-2 font-mono tracking-wide">
               Enter ↵ to send · Shift+Enter for newline
             </p>
           </div>

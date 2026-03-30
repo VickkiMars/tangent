@@ -125,7 +125,7 @@ def ensure_tenant_user(user_id: str, tenant_id: str = "tenant_1"):
             with conn.cursor() as cur:
                 cur.execute("INSERT INTO tenants (id, name) VALUES (%s, 'Default Org') ON CONFLICT DO NOTHING", (tenant_id,))
                 cur.execute(
-                    "INSERT INTO users (id, tenant_id, first_name, last_name, email) VALUES (%s, %s, 'User', '', 'user_' || %s || '@tangent.ai') ON CONFLICT DO NOTHING",
+                    "INSERT INTO users (id, tenant_id, first_name, last_name, email, hashed_password) VALUES (%s, %s, 'User', '', 'user_' || %s || '@tangent.ai', '') ON CONFLICT DO NOTHING",
                     (user_id, tenant_id, user_id)
                 )
             conn.commit()
@@ -178,12 +178,12 @@ def get_user_by_email(email: str):
         return None
 
 
-def record_agent_analytics(thread_id, agent_id, target_task_id, provider, model, tokens_prompt, tokens_completion, cost, tools_called, was_successful, lifetime):
+def record_agent_analytics(thread_id, agent_id, target_task_id, provider, model, tokens_prompt, tokens_completion, cost, tools_called, was_successful, lifetime, user_id="dev_user", tenant_id="tenant_1"):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 # ensure thread exists
-                cur.execute("INSERT INTO execution_threads (id, tenant_id, user_id, objective) VALUES (%s, 'tenant_1', 'dev_user', 'Auto-created') ON CONFLICT DO NOTHING", (thread_id,))
+                cur.execute("INSERT INTO execution_threads (id, tenant_id, user_id, objective) VALUES (%s, %s, %s, 'Auto-created') ON CONFLICT DO NOTHING", (thread_id, tenant_id, user_id))
                 
                 cur.execute("""
                     INSERT INTO agent_analytics (

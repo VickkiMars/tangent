@@ -1,6 +1,7 @@
 import instructor
 import structlog
 import litellm
+from datetime import date
 from typing import Dict, List, Optional
 from schemas import SynthesisManifest
 from prompts import META_AGENT_SYSTEM_PROMPT
@@ -35,27 +36,34 @@ class MetaAgent:
         else:
             tools_context = "\n".join(f"- {name}" for name in available_tool_names)
 
-        logger.info("meta_architecting_workflow", tool_count=len(available_tool_names))
+        today = date.today().isoformat()
+        user_message = (
+            f'Current date: {today}\n\n'
+            f'Objective: "{user_objective}"\n\n'
+            f"Available Tools:\n{tools_context}\n\n"
+            "Generate the SynthesisManifest containing the precise Blueprints and Task Routing (dependencies)."
+        )
+
+        logger.info(
+            "meta_input",
+            tool_count=len(available_tool_names),
+            objective=user_objective,
+            tools=available_tool_names,
+        )
 
         manifest = self.client.chat.completions.create(
             model=self.model_name,
             response_model=SynthesisManifest,
             messages=[
-                {
-                    "role": "system",
-                    "content": META_AGENT_SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f'Objective: "{user_objective}"\n\n'
-                        f"Available Tools:\n{tools_context}\n\n"
-                        "Generate the SynthesisManifest containing the precise Blueprints and Task Routing (dependencies)."
-                    )
-                }
+                {"role": "system", "content": META_AGENT_SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
             ],
-            temperature=0.1,  # High determinism for architecture
+            temperature=1.0,
         )
 
-        logger.info("meta_manifest_generated", blueprints=len(manifest.blueprints))
+        logger.info(
+            "meta_output",
+            blueprints=len(manifest.blueprints),
+            manifest=[b.model_dump() for b in manifest.blueprints],
+        )
         return manifest

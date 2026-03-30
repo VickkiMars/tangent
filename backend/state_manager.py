@@ -1,7 +1,10 @@
 import json
 from typing import Optional
 import redis.asyncio as redis
+import structlog
 from schemas import WorkflowState
+
+logger = structlog.get_logger(__name__)
 
 class StateManager:
     def __init__(self, redis_url: str = "redis://localhost:6379/0"):
@@ -21,8 +24,12 @@ class StateManager:
         key = self.get_key(session_id, tenant_id)
         state_json = await self.redis_client.get(key)
         if state_json:
-            data = json.loads(state_json)
-            return WorkflowState(**data)
+            try:
+                data = json.loads(state_json)
+                return WorkflowState(**data)
+            except Exception as e:
+                logger.error("state_deserialization_error", session_id=session_id, error=str(e))
+                return None
         return None
 
     async def update_status(self, session_id: str, status: str, tenant_id: str = "tenant_1") -> None:

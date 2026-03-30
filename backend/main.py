@@ -1,4 +1,22 @@
 import asyncio
+# Monkeypatch to handle compatibility issues between FastAPI 0.109.x and Starlette 1.0.0
+# Starlette 1.0.0 removed on_startup/on_shutdown from Router.__init__
+import starlette.routing
+_original_starlette_router_init = starlette.routing.Router.__init__
+def _new_starlette_router_init(self, *args, **kwargs):
+    kwargs.pop("on_startup", None)
+    kwargs.pop("on_shutdown", None)
+    _original_starlette_router_init(self, *args, **kwargs)
+starlette.routing.Router.__init__ = _new_starlette_router_init
+
+import fastapi.routing
+_original_router_init = fastapi.routing.APIRouter.__init__
+def _new_router_init(self, *args, **kwargs):
+    kwargs.pop("on_startup", None)
+    kwargs.pop("on_shutdown", None)
+    _original_router_init(self, *args, **kwargs)
+fastapi.routing.APIRouter.__init__ = _new_router_init
+
 import uuid
 import os
 import json
@@ -29,9 +47,10 @@ from compiler import JITCompiler
 from meta import MetaAgent
 from adapters import LangchainAdapter
 from telemetry import setup_telemetry, get_tracer
+from agent_reach_tools import AGENT_REACH_TOOLS
+from filesystem_tools import FILESYSTEM_TOOLS
 
-# Telemetry setup disabled to prevent ConnectionRefusedError when OTLP collector is not running
-# setup_telemetry()
+setup_telemetry()
 logger = structlog.get_logger(__name__)
 tracer = get_tracer(__name__)
 
@@ -82,18 +101,29 @@ def register_browser_tools(registry: GlobalToolRegistry):
     them to blueprints by name.
     """
     search_tools = []
-
-    # ── Web Search (DuckDuckGo) ───────────────────────────────────────────────
+    # ── Agent-Reach Tools (replacing DDG) ───────────────────────────────────
     try:
-        from langchain_community.tools import DuckDuckGoSearchRun
-        search = DuckDuckGoSearchRun(
-            name="web_search",
-            description="Search the web using DuckDuckGo. Input: a search query string. Returns relevant search result snippets. Use for current events, factual lookups, and general research."
-        )
-        search_tools.append(search)
-        logger.info("tool_registered", tool="web_search")
-    except (ImportError, Exception) as e:
-        logger.warning("web_search_skipped", reason=str(e))
+        for tool_info in AGENT_REACH_TOOLS:
+            registry.register(
+                tool_info["name"],
+                tool_info["func"],
+                tool_info["schema"]
+            )
+            logger.info("tool_registered", tool=tool_info["name"], source="agent-reach")
+    except Exception as e:
+        logger.error("agent_reach_tools_failed", reason=str(e))
+
+    # ── Filesystem Tools ────────────────────────────────────────────────────
+    try:
+        for tool_info in FILESYSTEM_TOOLS:
+            registry.register(
+                tool_info["name"],
+                tool_info["func"],
+                tool_info["schema"]
+            )
+            logger.info("tool_registered", tool=tool_info["name"], source="filesystem")
+    except Exception as e:
+        logger.error("filesystem_tools_failed", reason=str(e))
 
     # ── Wikipedia ────────────────────────────────────────────────────────────
     try:
@@ -339,6 +369,14 @@ async def execute_workflow_task(session_id: str, objective: str, provider: str =
         # Map Blueprints to SubTasks while enforcing routing overrides
         tasks: List[SubTask] = []
         for bp in manifest.blueprints:
+            # PREFIX task_id with session_id for global uniqueness (Bug Fix: Session Overlap)
+            # Ensure the prefix character is safe (e.g., ':')
+            original_task_id = bp.target_task_id
+            bp.target_task_id = f"{session_id}:{original_task_id}"
+            
+            # Update dependencies with the same prefix logic
+            bp.dependencies = [f"{session_id}:{dep}" for dep in bp.dependencies]
+
             # Overwrite provider dynamically based on tools required to enforce 
             # infrastructure-level routing over prompt hallucination
             injected = bp.injected_tools
@@ -373,11 +411,17 @@ async def execute_workflow_task(session_id: str, objective: str, provider: str =
 
         # 3. JIT Compilation & Execution
         compiler = JITCompiler(blackboard=blackboard, registry=registry)
-        await compiler.execute_manifest(manifest, tasks)
+        user_id = state.user_id if state else "dev_user"
+        await compiler.execute_manifest(manifest, tasks, user_id=user_id)
         logger.info("workflow_execution_completed", session_id=session_id)
 
         # 4. Mark Completed
         await state_manager.update_status(session_id, "completed")
+        await manager.broadcast_to_session(session_id, {
+            "type": "notification",
+            "performative": "completed",
+            "message": "Workflow completed successfully."
+        })
         
         # 5. Background Optimization
         from optimization import optimize_blueprints_task
@@ -431,12 +475,22 @@ async def resume_workflow_task(session_id: str, new_objective: str, provider: st
         new_manifest = await loop.run_in_executor(None, meta_agent.architect_workflow, combined_objective, available_tools, tool_descriptions)
         
         new_tasks = []
+        # When resuming, previous task IDs are already prefixed.
+        # Ensure we use those full IDs for dependencies.
         terminal_task_ids = list(task_ids)
         
         for bp in new_manifest.blueprints:
-            bp.target_task_id = f"{bp.target_task_id}_resumed"
-            # Link to old threads to satisfy DAG
+            # Prefix new tasks with session_id as well
+            original_task_id = bp.target_task_id
+            bp.target_task_id = f"{session_id}:{original_task_id}_resumed"
+            
+            # Map LLM-generated dependencies to their prefixed form
+            # LLM might refer to tasks by their short names
+            bp.dependencies = [f"{session_id}:{dep}" for dep in bp.dependencies]
+            
+            # Link to old threads (which are already prefixed in task_ids) to satisfy DAG
             bp.dependencies = list(set(bp.dependencies + terminal_task_ids))
+            
             state.manifest.blueprints.append(bp)
             
             bp.model = model
