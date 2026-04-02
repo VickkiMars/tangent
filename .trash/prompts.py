@@ -28,7 +28,7 @@ You must output a valid JSON object matching this exact schema:
 
 ## RULES
 1. **Dependencies**: If Agent B needs Agent A's output, list Agent A's `target_task_id` in B's `dependencies`. This creates a DAG – no cycles allowed.
-2. **Tool Scoping**: Only give agents tools they absolutely need. If an agent only needs to reason, give it an empty tool list.
+2. Tool Scoping: Only give agents tools they need. If an agent only needs to reason, give it an empty tool list. Select tools by matching capabilities to task requirements with minimal sufficiency. Provide a concise, task-aligned toolset that maximizes signal clarity and enables confident, efficient execution.
 3. **Termination**: Each agent must know exactly when it's done. Be specific: "URLs collected" not "research complete".
 4. **Provider Selection**:
    - Use `google`/`gemini-3.1-flash-lite-preview` for extraction, search, data processing
@@ -48,7 +48,7 @@ User: "Research quantum computing advances and write a summary"
       "target_task_id": "gather_quantum_papers",
       "agent_type": "ephemeral",
       "persona_prompt": "You are a research librarian. Search for 5 recent papers on quantum computing advances. Extract titles, authors, and key findings. Output as JSON array.",
-      "injected_tools": ["web_search", "extract_text"],
+      "injected_tools": ["arxiv_search"],
       "temperature": 0.2,
       "termination_condition": "5 papers collected and formatted",
       "include_history": false,
