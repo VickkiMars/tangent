@@ -118,7 +118,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
           const data = await res.json();
           const loadedThreads = data.map(d => ({
             id: d.session_id,
-            name: d.original_objective?.slice(0, 40) || 'Untitled',
+            name: d.original_objective || 'Untitled',
             status: d.status === 'analyzing' || d.status === 'executing' ? 'running' : d.status,
             time: d.timestamp ? new Date(d.timestamp * 1000).toLocaleTimeString() : '',
             cost: '$0.00' // Handled in individual analytics summary
@@ -248,7 +248,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
       </div>
 
       {/* ── Col 1: Thread Registry ───────────────────────────────────── */}
-      <div className={`col-span-12 lg:col-span-3 xl:col-span-2 gap-4 h-full ${mobilePanel === 'threads' ? 'flex' : 'hidden lg:flex'} flex-col`}>
+      <div className={`col-span-12 lg:col-span-3 xl:col-span-2 gap-4 h-full ${mobilePanel === 'threads' ? 'flex' : 'hidden lg:flex'} flex-col min-h-0`}>
         <div className="flex items-center justify-between px-2">
           <span className="text-[10px] font-medium text-[#71717A] tracking-widest uppercase">Threads</span>
           <button className="p-2 hover:bg-[#1A1A1A] rounded-full text-[#71717A] hover:text-white transition-colors">
@@ -256,7 +256,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
           </button>
         </div>
 
-        <div className="flex-grow overflow-y-auto space-y-3 pr-1">
+        <div className="flex-grow overflow-y-auto space-y-3 pr-1 min-h-0">
           {threads.map((thread, idx) => (
             <motion.div
               key={thread.id}
@@ -305,7 +305,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
         <div className="border-b border-white/[0.07] px-4 sm:px-6 py-3 bg-[rgba(14,14,14,0.9)] backdrop-blur-xl z-10 sticky top-0 flex flex-col gap-2 sm:gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <h2 className="font-sans text-sm sm:text-base font-semibold text-white tracking-tight truncate">
+              <h2 className="font-sans text-sm sm:text-base font-semibold text-white tracking-tight break-words">
                 {threads.find(t => t.id === selectedId)?.name || selectedId}
               </h2>
               <div className="text-[10px] text-[#71717A] flex gap-3 font-mono mt-0.5">

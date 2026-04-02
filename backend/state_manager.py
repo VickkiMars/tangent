@@ -2,6 +2,7 @@ import json
 from typing import Optional
 import redis.asyncio as redis
 import structlog
+import db
 from schemas import WorkflowState
 
 logger = structlog.get_logger(__name__)
@@ -38,6 +39,8 @@ class StateManager:
         if state:
             state.status = status
             await self.save_state(state)
+            # Synchronize with Postgres (Bug Fix: Stuck Tasks)
+            db.update_thread_status(session_id, status)
 
     async def list_workflows(self, tenant_id: str = "tenant_1", user_id: Optional[str] = None) -> list:
         """Lists workflow states for a given tenant, optionally filtered by user_id."""

@@ -385,7 +385,11 @@ class JITCompiler:
             max_retries = 3
             retry_count = 0
 
-            while True:
+            max_iterations = getattr(blueprint, "max_iterations", 20)
+            iteration_count = 0
+
+            while iteration_count < max_iterations:
+                iteration_count += 1
                 try:
                     # Execute LLM with STRICT schema boundaries
                     provider_name = getattr(blueprint, "provider", "openai")
@@ -551,12 +555,27 @@ class JITCompiler:
                         # No tool calls means the agent has reached its termination state
                         final_response_text = response_message.content
                         break
+                    
+                    if iteration_count >= max_iterations:
+                        final_response_text = f"ERROR: Agent reached maximum iterations ({max_iterations}) without terminating."
+                        logger.warning("agent_max_iterations_reached", agent_id=agent_id, task_id=task.task_id)
+                        break
                 except Exception as e:
                     retry_count += 1
                     logger.warning("agent_llm_error", agent_id=agent_id, retry_count=retry_count, error=str(e))
                     if retry_count > max_retries:
                         error_msg = f"Agent failed after {max_retries} retries. Last error: {str(e)}"
                         logger.error("agent_failed", agent_id=agent_id, error=str(e))
+                        
+                        # Record Analytics for FAILURE
+                        lifetime = time.time() - start_time
+                        await asyncio.to_thread(
+                            record_agent_analytics,
+                            task.task_id, agent_id, task.task_id, getattr(blueprint, "provider", "openai"), getattr(blueprint, "model", "gpt-4o"),
+                            prompt_tokens, completion_tokens, total_cost, tools_used, False, lifetime,
+                            self._user_id, self._tenant_id
+                        )
+
                         failure_message = A2AMessage(
                             message_id=f"msg_{agent_id}_{int(time.time())}",
                             thread_id=task.task_id,

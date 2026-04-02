@@ -252,4 +252,21 @@ def get_global_cost_summary(tenant_id: str = "tenant_1") -> dict:
     except Exception as e:
         logger.error("get_global_cost_summary_error", error=str(e))
         return {"total_cost_usd": 0.0, "total_tokens": 0, "total_threads": 0}
+def update_thread_status(thread_id: str, status: str):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                if status in ["completed", "failed"]:
+                    cur.execute(
+                        "UPDATE execution_threads SET status = %s, completed_at = NOW() WHERE id = %s",
+                        (status, thread_id)
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE execution_threads SET status = %s WHERE id = %s",
+                        (status, thread_id)
+                    )
+            conn.commit()
+    except Exception as e:
+        logger.error("update_thread_status_error", thread_id=thread_id, error=str(e))
 
