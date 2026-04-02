@@ -3,6 +3,7 @@ import os
 import subprocess
 import json
 import asyncio
+import http.client
 from typing import List, Dict, Any, Optional
 
 # Add Agent-Reach to sys.path
@@ -30,6 +31,45 @@ def run_cli_command(cmd: List[str], timeout: int = 30) -> str:
     except Exception as e:
         return f"Error: {str(e)}"
 
+def format_serper_results(data_str: str) -> str:
+    """Format Serper.dev JSON response into a clean string for the agent."""
+    try:
+        data = json.loads(data_str)
+        results = []
+        
+        # Knowledge Graph
+        if "knowledgeGraph" in data:
+            kg = data["knowledgeGraph"]
+            title = kg.get("title", "Unknown")
+            description = kg.get("description", "")
+            results.append(f"### KNOWLEDGE GRAPH: {title}\n{description}\n")
+            if "attributes" in kg:
+                attrs = kg["attributes"]
+                for k, v in attrs.items():
+                    results.append(f"- {k}: {v}")
+                results.append("")
+
+        # Organic Results
+        if "organic" in data:
+            results.append("### ORGANIC SEARCH RESULTS:")
+            for item in data["organic"][:10]: # Limit to top 10
+                title = item.get("title", "No Title")
+                link = item.get("link", "#")
+                snippet = item.get("snippet", "")
+                position = item.get("position", "?")
+                results.append(f"{position}. [{title}]({link})\n   {snippet}\n")
+
+        # People Also Ask
+        if "peopleAlsoAsk" in data:
+            results.append("### PEOPLE ALSO ASK:")
+            for paa in data["peopleAlsoAsk"]:
+                results.append(f"- {paa.get('question')}")
+            results.append("")
+
+        return "\n".join(results) if results else "No significant results found."
+    except Exception as e:
+        return f"Error parsing Serper results: {str(e)}\nRaw: {data_str[:500]}..."
+
 # --- Web Tools ---
 
 async def web_read(url: str) -> str:
@@ -37,18 +77,34 @@ async def web_read(url: str) -> str:
     # Use jina.ai reader via curl
     return await asyncio.to_thread(run_cli_command, ["curl", "-s", f"https://r.jina.ai/{url}"])
 
-async def web_search(query: str, num_results: int = 5) -> str:
-    """Search the web using Exa via mcporter. Returns AI-optimized search results."""
-    # The user asked to replace ddg with the one library offers. Exa is the library's choice.
-    cmd = ["mcporter", "call", f"exa.web_search_exa(query: \"{query}\", numResults: {num_results})"]
-    return await asyncio.to_thread(run_cli_command, cmd)
+async def web_search(query: str, num_results: int = 10) -> str:
+    """Search the web using Google via Serper.dev. Returns rich formatted results."""
+    key = os.environ.get("SERPER_DEV_KEY")
+    if not key:
+        return "Error: SERPER_DEV_KEY not found in environment. Please configure it in .env."
+
+    def _do_search():
+        try:
+            conn = http.client.HTTPSConnection("google.serper.dev")
+            payload = json.dumps({"q": query, "num": num_results})
+            headers = {
+                'X-API-KEY': key,
+                'Content-Type': 'application/json'
+            }
+            conn.request("POST", "/search", payload, headers)
+            res = conn.getresponse()
+            data = res.read().decode("utf-8")
+            return format_serper_results(data)
+        except Exception as e:
+            return f"Error connecting to Serper.dev: {str(e)}"
+
+    return await asyncio.to_thread(_do_search)
 
 async def web_search_batch(queries: List[str], num_results: int = 5) -> str:
-    """Search the web for multiple queries in parallel using Exa. All queries execute simultaneously and results are returned together."""
+    """Search the web for multiple queries in parallel using Serper.dev."""
     async def _search_one(q: str) -> str:
-        cmd = ["mcporter", "call", f"exa.web_search_exa(query: \"{q}\", numResults: {num_results})"]
-        result = await asyncio.to_thread(run_cli_command, cmd)
-        return f"### Query: {q}\n{result}"
+        result = await web_search(q, num_results=num_results)
+        return f"## Results for: {q}\n{result}"
 
     results = await asyncio.gather(*[_search_one(q) for q in queries])
     return "\n\n---\n\n".join(results)
@@ -271,12 +327,12 @@ AGENT_REACH_TOOLS = [
             "type": "function",
             "function": {
                 "name": "web_search",
-                "description": "Powerful semantic web search (Exa). Unlike keyword search, this finds pages that are relevant to the *meaning* of your query. Returns AI-optimized snippets. Use for general research, finding specific data points, and current events.",
+                "description": "Comprehensive web search (powered by Google via Serper.dev). Returns rich results including organic snippets, knowledge graph data, and related questions. Use for accurate, up-to-date information on any topic.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "The search query or research objective."},
-                        "num_results": {"type": "integer", "description": "Number of high-quality results to return (default 5).", "default": 5}
+                        "query": {"type": "string", "description": "The search query (e.g., 'latest Nvidia earnings' or 'best open source LLMs 2025')."},
+                        "num_results": {"type": "integer", "description": "Number of high-quality results to return (default 10, max 20).", "default": 10}
                     },
                     "required": ["query"]
                 }
@@ -290,14 +346,14 @@ AGENT_REACH_TOOLS = [
             "type": "function",
             "function": {
                 "name": "web_search_batch",
-                "description": "Run multiple semantic web searches (Exa) in parallel in a single call. All queries execute simultaneously, making this dramatically faster than sequential web_search calls. Always prefer this over calling web_search multiple times. Use when researching multiple topics, angles, or data points at once. IMPORTANT: Exa is a neural semantic search engine — write each query as a complete natural-language sentence or question describing the content you want to find, NOT as keyword strings. Example good query: 'What are the performance benchmarks and architectural improvements of NVIDIA Blackwell GPUs?'. Example bad query: 'NVIDIA Blackwell GPU benchmark specs'.",
+                "description": "Run multiple web searches in parallel in a single call. Dramatically faster than sequential calls. Use when researching multiple angles or comparative data points simultaneously.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "queries": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of search queries to execute in parallel. Send all related queries at once (e.g. 10-20 queries covering different angles of your research objective)."
+                            "description": "List of search queries to execute in parallel."
                         },
                         "num_results": {"type": "integer", "description": "Number of results per query (default 5).", "default": 5}
                     },
