@@ -24,6 +24,7 @@ class AgentBlueprint(BaseModel):
     provider: Literal["openai", "anthropic", "google"] = Field(default="google", description="The LLM provider to use")
     model: str = Field(default="gemini-3.1-flash-lite-preview", description="The specific LLM model to use")
     dependencies: List[str] = Field(default_factory=list, description="List of task_ids this agent depends on")
+    max_iterations: int = Field(default=20, description="Max steps for the LLM loop to prevent runaway costs")
 
 class SynthesisManifest(BaseModel):
     session_id: str = Field(default="", description="Populated by the server after architect_workflow returns")
