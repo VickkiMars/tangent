@@ -7,3 +7,8 @@ Agent-Reach/
 scripts/
 sonorous-dragon-432508-a1-c5066b1104cd.json
 temp_prompts.md
+.agent/
+claude-code-doc/
+__pycache__/
+*.pyc
+.pytest_cache/
