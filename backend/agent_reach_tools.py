@@ -4,6 +4,9 @@ import subprocess
 import json
 import asyncio
 import http.client
+import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 
 # Add Agent-Reach to sys.path
@@ -108,6 +111,210 @@ async def web_search_batch(queries: List[str], num_results: int = 5) -> str:
 
     results = await asyncio.gather(*[_search_one(q) for q in queries])
     return "\n\n---\n\n".join(results)
+
+# --- ArXiv Tools ---
+
+async def arxiv_search(query: str, limit: int = 5) -> str:
+    """Search for academic papers on ArXiv using their Atom API."""
+    def _do_arxiv_search():
+        try:
+            # ArXiv API uses Atom XML format
+            base_url = "http://export.arxiv.org/api/query?"
+            search_query = f"search_query=all:{urllib.parse.quote(query)}"
+            params = f"&start=0&max_results={limit}"
+            url = base_url + search_query + params
+            
+            with urllib.request.urlopen(url) as response:
+                xml_data = response.read().decode('utf-8')
+                
+            # Parse XML
+            root = ET.fromstring(xml_data)
+            
+            # Atom namespace
+            ns = {'atom': 'http://www.w3.org/2005/Atom'}
+            
+            entries = root.findall('atom:entry', ns)
+            if not entries:
+                return "No papers found on ArXiv for this query."
+            
+            formatted_results = []
+            for entry in entries:
+                title_elem = entry.find('atom:title', ns)
+                title = title_elem.text.strip().replace('\n', ' ') if title_elem is not None and title_elem.text else "No Title"
+                
+                published_elem = entry.find('atom:published', ns)
+                published = published_elem.text[:10] if published_elem is not None and published_elem.text else "Unknown Date"
+                
+                summary_elem = entry.find('atom:summary', ns)
+                summary = summary_elem.text.strip().replace('\n', ' ') if summary_elem is not None and summary_elem.text else "No Abstract"
+                
+                authors = []
+                for author_elem in entry.findall('atom:author', ns):
+                    name_elem = author_elem.find('atom:name', ns)
+                    if name_elem is not None and name_elem.text:
+                        authors.append(name_elem.text)
+                
+                author_str = ", ".join(authors) if authors else "Unknown Authors"
+                
+                # Links: look for alternate (abstract page) and related (PDF)
+                links = entry.findall('atom:link', ns)
+                abs_url = ""
+                pdf_url = ""
+                for link in links:
+                    if link.get('rel') == 'alternate':
+                        abs_url = link.get('href')
+                    elif link.get('title') == 'pdf':
+                        pdf_url = link.get('href')
+                
+                # Categories
+                categories = [c.get('term') for c in entry.findall('atom:category', ns)]
+                
+                res = [
+                    f"### [{title}]({abs_url})",
+                    f"**Authors**: {', '.join(authors)}",
+                    f"**Published**: {published} | **Categories**: {', '.join(categories)}",
+                ]
+                if pdf_url:
+                    res.append(f"[PDF Link]({pdf_url})")
+                
+                res.append(f"\n{summary[:500]}..." if len(summary) > 500 else f"\n{summary}")
+                formatted_results.append("\n".join(res))
+                
+            return "\n\n---\n\n".join(formatted_results)
+            
+        except Exception as e:
+            return f"Error querying ArXiv: {str(e)}"
+
+    return await asyncio.to_thread(_do_arxiv_search)
+
+# --- Wikipedia Tools ---
+
+async def wikipedia_search(query: str, limit: int = 5) -> str:
+    """Search for relevant Wikipedia page titles and links."""
+    def _do_wp_search():
+        try:
+            url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={urllib.parse.quote(query)}&limit={limit}&namespace=0&format=json"
+            headers = {"User-Agent": "TangentResearchTool/1.0 (contact: support@example.com)"}
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode('utf-8'))
+            
+            # OpenSearch format: [query, [titles], [descriptions], [links]]
+            titles = data[1]
+            links = data[3]
+            
+            if not titles:
+                return "No Wikipedia pages found for this query."
+            
+            results = []
+            for t, l in zip(titles, links):
+                results.append(f"- [{t}]({l})")
+            
+            return "\n".join(results)
+        except Exception as e:
+            return f"Error searching Wikipedia: {str(e)}"
+
+    return await asyncio.to_thread(_do_wp_search)
+
+async def wikipedia_read(title: str) -> str:
+    """Read the full plain text content of a specific Wikipedia page."""
+    def _do_wp_read():
+        try:
+            url = f"https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext&titles={urllib.parse.quote(title)}&format=json"
+            headers = {"User-Agent": "TangentResearchTool/1.0 (contact: support@example.com)"}
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode('utf-8'))
+            
+            pages = data.get("query", {}).get("pages", {})
+            if not pages:
+                return f"Error: Could not find page '{title}'."
+            
+            # The page ID is the key
+            page_id = list(pages.keys())[0]
+            if page_id == "-1":
+                return f"Error: Page '{title}' does not exist."
+                
+            extract = pages[page_id].get("extract", "")
+            return extract if extract else "This page has no text content."
+        except Exception as e:
+            return f"Error reading Wikipedia page: {str(e)}"
+
+    return await asyncio.to_thread(_do_wp_read)
+
+# --- Reddit Tools ---
+
+async def reddit_search(query: str, limit: int = 5) -> str:
+    """Search Reddit for relevant posts using the public JSON API."""
+    def _do_reddit_search():
+        try:
+            url = f"https://www.reddit.com/search.json?q={urllib.parse.quote(query)}&limit={limit}&sort=relevance"
+            headers = {"User-Agent": "TangentResearchTool/1.0 (contact: support@example.com)"}
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode('utf-8'))
+            
+            posts = data.get("data", {}).get("children", [])
+            if not posts:
+                return "No Reddit posts found for this query."
+            
+            results = []
+            for p in posts:
+                d = p.get("data", {})
+                title = d.get("title", "No Title")
+                permalink = d.get("permalink", "")
+                url = f"https://www.reddit.com{permalink}"
+                subreddit = d.get("subreddit_name_prefixed", "r/?")
+                score = d.get("score", 0)
+                num_comments = d.get("num_comments", 0)
+                results.append(f"- [{title}]({url}) | {subreddit} | {score} votes | {num_comments} comments")
+            
+            return "\n".join(results)
+        except Exception as e:
+            return f"Error searching Reddit: {str(e)}"
+
+    return await asyncio.to_thread(_do_reddit_search)
+
+async def reddit_read(url: str) -> str:
+    """Read a specific Reddit post and its top comments. URL should end with .json or be the normal post URL."""
+    def _do_reddit_read():
+        try:
+            if not url.endswith(".json"):
+                api_url = url.rstrip("/") + ".json"
+            else:
+                api_url = url
+                
+            headers = {"User-Agent": "TangentResearchTool/1.0 (contact: support@example.com)"}
+            req = urllib.request.Request(api_url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode('utf-8'))
+            
+            # Reddit comments JSON is a list: [post_data, comments_data]
+            if not isinstance(data, list) or len(data) < 1:
+                return f"Error: Unexpected Reddit API response for {url}"
+            
+            post_info = data[0].get("data", {}).get("children", [{}])[0].get("data", {})
+            title = post_info.get("title", "No Title")
+            author = post_info.get("author", "unknown")
+            subreddit = post_info.get("subreddit_name_prefixed", "r/?")
+            selftext = post_info.get("selftext", "")
+            
+            output = [f"# {title}", f"By u/{author} in {subreddit}", "\n" + selftext + "\n", "## Top Comments\n"]
+            
+            comments = data[1].get("data", {}).get("children", [])
+            for c in comments[:10]: # Top 10 comments
+                cd = c.get("data", {})
+                c_body = cd.get("body", "")
+                c_author = cd.get("author", "[deleted]")
+                c_score = cd.get("score", 0)
+                if c_body:
+                    output.append(f"**u/{c_author}** ({c_score} votes):\n{c_body}\n")
+            
+            return "\n".join(output)
+        except Exception as e:
+            return f"Error reading Reddit post: {str(e)}"
+
+    return await asyncio.to_thread(_do_reddit_read)
 
 # --- Twitter/X Tools ---
 
@@ -702,6 +909,97 @@ AGENT_REACH_TOOLS = [
                     "type": "object",
                     "properties": {
                         "url": {"type": "string", "description": "LinkedIn profile URL."}
+                    },
+                    "required": ["url"]
+                }
+            }
+        }
+    },
+    {
+        "name": "arxiv_search",
+        "func": arxiv_search,
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "arxiv_search",
+                "description": "Powerful academic research tool. Search ArXiv for scientific papers, preprints, and deep technical literature. Returns titles, authors, full abstracts, and direct PDF links. Essential for staying current on AI, physics, math, and CS research.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Technical search query (e.g. 'Self-Attention Transformers' or 'Quantum Error Correction')."},
+                        "limit": {"type": "integer", "description": "Number of relevant papers to return (default 5, max 10).", "default": 5}
+                    },
+                    "required": ["query"]
+                }
+            }
+        }
+    },
+    {
+        "name": "wikipedia_search",
+        "func": wikipedia_search,
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "wikipedia_search",
+                "description": "Find relevant Wikipedia page titles and URLs for a given topic. Use this as a first step to identify the exact page name before reading its content.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "General topic or entity to search for (e.g. 'Large Language Model' or 'Marie Curie')."}
+                    },
+                    "required": ["query"]
+                }
+            }
+        }
+    },
+    {
+        "name": "wikipedia_read",
+        "func": wikipedia_read,
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "wikipedia_read",
+                "description": "Fetch the full, clean plain-text content of a specific Wikipedia page. Requires a precise page title (best obtained from wikipedia_search). Ideal for deep-dives into verified general knowledge.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "The exact title of the Wikipedia page (e.g. 'Artificial intelligence' or 'Alan Turing')."}
+                    },
+                    "required": ["title"]
+                }
+            }
+        }
+    },
+    {
+        "name": "reddit_search",
+        "func": reddit_search,
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "reddit_search",
+                "description": "Search Reddit for posts, discussions, and community opinions on a topic. Returns titles, links, vote counts, and subreddit info. Ideal for subjective, experience-based, or recent casual information.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query or topic."}
+                    },
+                    "required": ["query"]
+                }
+            }
+        }
+    },
+    {
+        "name": "reddit_read",
+        "func": reddit_read,
+        "schema": {
+            "type": "function",
+            "function": {
+                "name": "reddit_read",
+                "description": "Read the full text of a specific Reddit post along with its top comments. Use this to dive deep into a specific thread or discussion found via reddit_search.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "The full URL of the Reddit post to read."}
                     },
                     "required": ["url"]
                 }
