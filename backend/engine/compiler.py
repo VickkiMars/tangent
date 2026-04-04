@@ -7,17 +7,17 @@ import structlog
 import litellm
 
 # Assuming schemas are defined in a separate file named schemas.py
-from schemas import (
+from core.schemas import (
     SubTask,
     AgentBlueprint,
     SynthesisManifest,
     A2AMessage,
     MessagePayload
 )
-from blackboard import EventBlackboard
-from registry import GlobalToolRegistry
-from telemetry import get_tracer
-from llm_provider import LLMFactory
+from engine.blackboard import EventBlackboard
+from tools.registry import GlobalToolRegistry
+from infrastructure.telemetry import get_tracer
+from infrastructure.llm_provider import LLMFactory
 
 logger = structlog.get_logger(__name__)
 tracer = get_tracer(__name__)
@@ -354,7 +354,7 @@ class JITCompiler:
 
             # 3. SECURE EXECUTION ROUTER (LLM LOOP)
             import time
-            from db import check_budget_exceeded, record_agent_analytics
+            from infrastructure.db import check_budget_exceeded, record_agent_analytics
             import asyncio
             from litellm import completion_cost
             

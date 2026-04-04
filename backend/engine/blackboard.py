@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Set
 from collections import defaultdict
 import redis.asyncio as redis
 import structlog
-from schemas import A2AMessage
+from core.schemas import A2AMessage
 
 logger = structlog.get_logger(__name__)
 

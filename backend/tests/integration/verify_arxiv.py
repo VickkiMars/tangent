@@ -5,7 +5,7 @@ import os
 # Add parent directory to sys.path to import agent_reach_tools
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from agent_reach_tools import arxiv_search
+from tools.agent_reach_tools import arxiv_search
 
 async def main():
     print("--- Testing ArXiv Search Tool ---")

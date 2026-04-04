@@ -2,7 +2,7 @@ from typing import Callable, Dict, Any, List
 
 # ToolAdapter is the canonical base class defined in registry.py.
 # Importing from there avoids having two independent definitions.
-from registry import ToolAdapter
+from tools.registry import ToolAdapter
 
 
 class LangchainAdapter(ToolAdapter):

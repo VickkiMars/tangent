@@ -1,8 +1,8 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
-from blackboard import EventBlackboard
-from schemas import A2AMessage, MessagePayload
+from engine.blackboard import EventBlackboard
+from core.schemas import A2AMessage, MessagePayload
 import time
 
 @pytest.fixture
