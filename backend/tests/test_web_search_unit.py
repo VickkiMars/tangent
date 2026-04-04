@@ -6,7 +6,7 @@ import os
 # Add backend to sys.path to import agent_reach_tools
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from agent_reach_tools import web_search
+from tools.agent_reach_tools import web_search
 
 @pytest.mark.asyncio
 async def test_web_search_success():
@@ -45,7 +45,7 @@ async def test_web_search_error():
 @pytest.mark.asyncio
 async def test_web_search_parallel_batch():
     """Test unit formatting for web_search_batch (also in agent_reach_tools)."""
-    from agent_reach_tools import web_search_batch
+    from tools.agent_reach_tools import web_search_batch
     
     mock_response = MagicMock()
     mock_response.returncode = 0

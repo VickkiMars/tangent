@@ -2,8 +2,8 @@ import json
 from typing import Optional
 import redis.asyncio as redis
 import structlog
-import db
-from schemas import WorkflowState
+from infrastructure import db
+from core.schemas import WorkflowState
 
 logger = structlog.get_logger(__name__)
 

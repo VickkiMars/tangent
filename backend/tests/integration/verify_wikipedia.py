@@ -5,7 +5,7 @@ import os
 # Add parent directory to sys.path to import agent_reach_tools
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from agent_reach_tools import wikipedia_search, wikipedia_read
+from tools.agent_reach_tools import wikipedia_search, wikipedia_read
 
 async def main():
     print("--- Testing Wikipedia Search & Read ---")

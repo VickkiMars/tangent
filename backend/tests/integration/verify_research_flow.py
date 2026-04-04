@@ -7,9 +7,9 @@ from dotenv import load_dotenv
 # Add backend to sys.path
 sys.path.append(os.path.dirname(__file__))
 
-from meta import MetaAgent
-from agent_reach_tools import AGENT_REACH_TOOLS
-from registry import GlobalToolRegistry
+from engine.meta import MetaAgent
+from tools.agent_reach_tools import AGENT_REACH_TOOLS
+from tools.registry import GlobalToolRegistry
 
 async def verify_research_flow():
     load_dotenv()

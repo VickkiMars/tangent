@@ -2,8 +2,8 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 import json
-from compiler import JITCompiler
-from schemas import AgentBlueprint, SubTask, SynthesisManifest, A2AMessage, MessagePayload
+from engine.compiler import JITCompiler
+from core.schemas import AgentBlueprint, SubTask, SynthesisManifest, A2AMessage, MessagePayload
 
 @pytest.fixture
 def mock_blackboard():

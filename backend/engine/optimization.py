@@ -1,7 +1,7 @@
 import asyncio
 import json
 import structlog
-from db import get_workflow_analytics
+from infrastructure.db import get_workflow_analytics
 import datetime
 
 logger = structlog.get_logger(__name__)
@@ -53,7 +53,7 @@ async def optimize_blueprints_task(session_id: str, state_manager, blackboard):
         # 4. Request Meta Agent to Synthesize Improvements
         provider_name = "google"
         model_name = "gemini-3.1-flash-lite-preview"
-        from llm_provider import LLMFactory
+        from infrastructure.llm_provider import LLMFactory
         llm_provider = LLMFactory.get_provider(provider_name, model=model_name)
         
         messages = [

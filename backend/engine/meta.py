@@ -3,8 +3,8 @@ import structlog
 import litellm
 from datetime import date
 from typing import Dict, List, Optional
-from schemas import SynthesisManifest
-from prompts import META_AGENT_SYSTEM_PROMPT
+from core.schemas import SynthesisManifest
+from engine.prompts import META_AGENT_SYSTEM_PROMPT
 
 logger = structlog.get_logger(__name__)
 
