@@ -3,7 +3,7 @@ import {
   CheckCircle, AlertCircle,
   Terminal, Cpu, Wrench, MessageSquare, Search,
   Clock, DollarSign, X, Download, ChevronDown, ChevronUp,
-  Box, Layers, GitBranch, UserCheck, Activity,
+  Box, Layers, GitBranch, UserCheck, Activity, XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GraphView from './GraphView';
@@ -218,6 +218,28 @@ const TaskBoard = ({ defaultTaskId = null }) => {
     }
   };
 
+  const cancelWorkflow = async () => {
+    if (!selectedId) return;
+    try {
+      const res = await fetch(`${API_URL}/workflows/${selectedId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        }
+      });
+      if (res.ok) {
+        notify('Workflow cancellation requested', 'info');
+      } else {
+        const data = await res.json();
+        notify(data.message || 'Failed to cancel workflow', 'error');
+      }
+    } catch (err) {
+      console.error('Cancellation failed:', err);
+      notify('Failed to cancel workflow', 'error');
+    }
+  };
+
   return (
     <div
       className="h-[calc(100dvh-5rem)] sm:h-[calc(100vh-6rem)] w-full max-w-[1920px] mx-auto grid grid-cols-12 gap-2 sm:gap-4 lg:gap-6 p-2 sm:p-4 lg:p-6 font-sans text-sm bg-[#000000]"
@@ -324,6 +346,16 @@ const TaskBoard = ({ defaultTaskId = null }) => {
                   >{f}</button>
                 ))}
               </div>
+            )}
+            
+            {(workflowState?.status === 'analyzing' || workflowState?.status === 'executing' || workflowState?.status === 'running') && (
+              <button
+                onClick={cancelWorkflow}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#EF4444]/30 bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20 transition-all text-[10px] font-bold uppercase tracking-wide"
+              >
+                <XCircle size={12} />
+                Cancel Task
+              </button>
             )}
           </div>
 

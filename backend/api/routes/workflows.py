@@ -77,6 +77,9 @@ async def execute_workflow_task(session_id: str, objective: str, provider: str =
             "extract_text": "gemini-3.1-flash-lite-preview",
             "web_search": "gemini-3.1-flash-lite-preview",
             "compile_python_tool": "gpt-4o",
+            "write_file": "gpt-4o",
+            "patch_file": "gpt-4o",
+            "run_shell": "gpt-4o",
             "reasoning": "gpt-4o",
             "creative_writing": "claude-3-5-sonnet-latest",
             "default": "gemini-3.1-flash-lite-preview"
@@ -153,11 +156,12 @@ async def execute_workflow_task_wrapper(session_id: str, objective: str, provide
         await execute_workflow_task(session_id, objective, provider, model)
     except asyncio.CancelledError:
         logger.info("workflow_cancelled", session_id=session_id)
+        # Update state to failed/cancelled on explicit cancellation
+        await state_manager.update_status(session_id, "failed")
         raise
     finally:
-        current_task = asyncio.current_task()
-        if current_task in active_workflow_tasks:
-            active_workflow_tasks.remove(current_task)
+        if session_id in active_workflow_tasks:
+            del active_workflow_tasks[session_id]
 
 async def resume_workflow_task(session_id: str, new_objective: str, provider: str, model: str):
     try:
@@ -227,9 +231,8 @@ async def resume_workflow_task(session_id: str, new_objective: str, provider: st
             "message": clean_msg
         })
     finally:
-        current_task = asyncio.current_task()
-        if current_task in active_workflow_tasks:
-            active_workflow_tasks.remove(current_task)
+        if session_id in active_workflow_tasks:
+            del active_workflow_tasks[session_id]
 
 # --- Endpoints ---
 
@@ -252,7 +255,7 @@ async def submit_workflow(
     await state_manager.save_state(initial_state)
 
     task = asyncio.create_task(execute_workflow_task_wrapper(session_id, request.objective, request.provider, request.model))
-    active_workflow_tasks.add(task)
+    active_workflow_tasks[session_id] = task
 
     return WorkflowResponse(
         session_id=session_id,
@@ -329,8 +332,34 @@ async def resume_workflow(
         raise HTTPException(status_code=400, detail="Cannot resume an active workflow")
     
     task = asyncio.create_task(resume_workflow_task(session_id, request.new_objective, request.provider, request.model))
-    active_workflow_tasks.add(task)
+    active_workflow_tasks[session_id] = task
     return WorkflowResponse(session_id=session_id, status="analyzing", message="Resumption started")
+
+@router.post("/workflows/{session_id}/cancel")
+async def cancel_workflow(
+    session_id: str,
+    user: dict = Depends(get_current_user)
+):
+    state = await state_manager.load_state(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    if state.user_id != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if session_id in active_workflow_tasks:
+        task = active_workflow_tasks[session_id]
+        task.cancel()
+        logger.info("workflow_cancel_requested", session_id=session_id)
+        
+        await manager.broadcast_to_session(session_id, {
+            "type": "notification",
+            "performative": "failure",
+            "message": "Workflow execution was cancelled by the user."
+        })
+        
+        return {"status": "success", "message": "Workflow cancellation requested."}
+    else:
+        return {"status": "error", "message": "No active task found for this session."}
 
 @router.websocket("/workflows/{session_id}/events")
 async def websocket_endpoint(

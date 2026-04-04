@@ -103,15 +103,6 @@ async def web_search(query: str, num_results: int = 10) -> str:
 
     return await asyncio.to_thread(_do_search)
 
-async def web_search_batch(queries: List[str], num_results: int = 5) -> str:
-    """Search the web for multiple queries in parallel using Serper.dev."""
-    async def _search_one(q: str) -> str:
-        result = await web_search(q, num_results=num_results)
-        return f"## Results for: {q}\n{result}"
-
-    results = await asyncio.gather(*[_search_one(q) for q in queries])
-    return "\n\n---\n\n".join(results)
-
 # --- ArXiv Tools ---
 
 async def arxiv_search(query: str, limit: int = 5) -> str:
@@ -534,7 +525,7 @@ AGENT_REACH_TOOLS = [
             "type": "function",
             "function": {
                 "name": "web_search",
-                "description": "Comprehensive web search (powered by Google via Serper.dev). Returns rich results including organic snippets, knowledge graph data, and related questions. Use for accurate, up-to-date information on any topic.",
+                "description": "Comprehensive web search (powered by Google via Serper.dev). Returns rich formatted results including organic snippets, knowledge graph data, and related questions. Use for accurate, up-to-date information on any topic.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -542,29 +533,6 @@ AGENT_REACH_TOOLS = [
                         "num_results": {"type": "integer", "description": "Number of high-quality results to return (default 10, max 20).", "default": 10}
                     },
                     "required": ["query"]
-                }
-            }
-        }
-    },
-    {
-        "name": "web_search_batch",
-        "func": web_search_batch,
-        "schema": {
-            "type": "function",
-            "function": {
-                "name": "web_search_batch",
-                "description": "Run multiple web searches in parallel in a single call. Dramatically faster than sequential calls. Use when researching multiple angles or comparative data points simultaneously.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "queries": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "List of search queries to execute in parallel."
-                        },
-                        "num_results": {"type": "integer", "description": "Number of results per query (default 5).", "default": 5}
-                    },
-                    "required": ["queries"]
                 }
             }
         }
