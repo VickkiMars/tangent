@@ -86,3 +86,23 @@ class UserResponse(BaseModel):
     first_name: str
     last_name: str
     tenant_id: str
+
+# 6. API Requests
+class WorkflowRequest(BaseModel):
+    objective: str
+    provider: str = "google"
+    model: str = "gemini-1.5-flash"
+
+class WorkflowResponse(BaseModel):
+    session_id: str
+    status: str
+    message: str
+
+class HumanInputRequest(BaseModel):
+    task_id: str
+    input: str
+
+class ResumeWorkflowRequest(BaseModel):
+    new_objective: str
+    provider: str = "google"
+    model: str = "gemini-3.1-flash-lite-preview"
