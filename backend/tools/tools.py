@@ -5,8 +5,8 @@ import traceback
 
 def compile_python_tool(code_string: str, tool_name: str, test_kwargs: Optional[Dict[str, Any]] = None) -> str:
     """
-    Dynamically compiles and registers a Python function as a tool. Use this to handle deterministic data
-    extraction, scraping, or math instead of using LLM reasoning.
+    Dynamically compiles and registers a Python function as a tool. Use this to handle 
+    complex logic, custom data processing, or creating new capabilities during a build task.
     
     Args:
         code_string (str): The raw Python code containing the function definition. Ensure proper indentation.

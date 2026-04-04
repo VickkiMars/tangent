@@ -11,5 +11,5 @@ state_manager = StateManager(redis_url=redis_url)
 blackboard = EventBlackboard(redis_url=redis_url)
 registry = GlobalToolRegistry()
 
-# Tracking active workflow tasks for graceful shutdown
-active_workflow_tasks: set[asyncio.Task] = set()
+# Tracking active workflow tasks for graceful shutdown and cancellation: session_id -> asyncio.Task
+active_workflow_tasks: dict[str, asyncio.Task] = {}

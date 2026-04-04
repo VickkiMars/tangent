@@ -67,6 +67,54 @@ export const authGetMe = async (token) => {
   return response.json();
 };
 
+export const getTools = async () => {
+  const response = await fetch(`${API_URL}/tools`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error("Failed to fetch tools");
+  return response.json();
+};
+
+export const createTool = async (payload) => {
+  const response = await fetch(`${API_URL}/tools`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to create tool");
+  return data;
+};
+
+export const deleteTool = async (toolId) => {
+  const response = await fetch(`${API_URL}/tools/${toolId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error("Failed to delete tool");
+  return response.json();
+};
+
+export const approveTool = async (toolId, approved) => {
+  const response = await fetch(`${API_URL}/tools/${toolId}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ approved }),
+  });
+  if (!response.ok) throw new Error("Failed to update tool approval");
+  return response.json();
+};
+
+export const toggleTool = async (toolId, active) => {
+  const response = await fetch(`${API_URL}/tools/${toolId}/toggle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ active }),
+  });
+  if (!response.ok) throw new Error("Failed to toggle tool");
+  return response.json();
+};
+
 export const connectToWorkflowEvents = (sessionId, onMessage, onError) => {
   const ws = new WebSocket(`${WS_URL}/workflows/${sessionId}/events?api_key=${BACKEND_ACCESS_TOKEN}`);
   

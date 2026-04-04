@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   Send, Plus, CheckCircle, AlertCircle, ArrowRight,
-  PauseCircle, Terminal, Loader, Zap, Menu, ChevronDown, Sparkles, ExternalLink
+  PauseCircle, Terminal, Loader, Zap, Menu, ChevronDown, Sparkles, ExternalLink, XCircle
 } from 'lucide-react';
 import { notify } from '../components/Notification';
 
@@ -357,6 +357,25 @@ export default function Chat() {
     }
   };
 
+  const cancelWorkflow = async () => {
+    if (!activeId) return;
+    try {
+      const res = await fetch(`${API_URL}/workflows/${activeId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }
+      });
+      if (res.ok) {
+        notify('Workflow cancellation requested', 'info');
+      } else {
+        const data = await res.json();
+        notify(data.message || 'Failed to cancel workflow', 'error');
+      }
+    } catch (err) {
+      console.error('Cancellation failed:', err);
+      notify('Failed to cancel workflow', 'error');
+    }
+  };
+
   const activeSession = sessions.find(s => s.id === activeId);
   const activeEvents  = eventMap[activeId] || [];
   const statusMeta    = STATUS_MAP[activeSession?.status] || STATUS_MAP.completed;
@@ -450,6 +469,15 @@ export default function Chat() {
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: statusMeta.color }} />
                 {statusMeta.label}
               </span>
+              {(activeSession.status === 'analyzing' || activeSession.status === 'executing' || activeSession.status === 'running') && (
+                <button
+                  onClick={cancelWorkflow}
+                  className="flex items-center justify-center p-1.5 rounded-lg border border-[#EF4444]/30 bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20 transition-all"
+                  title="Cancel Execution"
+                >
+                  <XCircle size={15} />
+                </button>
+              )}
             </>
           ) : (
             <span className="text-[11px] text-[#71717A]">No workflow selected</span>
@@ -477,6 +505,15 @@ export default function Chat() {
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: statusMeta.color }} />
                 {statusMeta.label}
               </span>
+              {(activeSession.status === 'analyzing' || activeSession.status === 'executing' || activeSession.status === 'running') && (
+                <button
+                  onClick={cancelWorkflow}
+                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full border border-[#EF4444]/30 bg-[#EF4444]/10 text-[#EF4444] hover:bg-[#EF4444]/20 transition-all"
+                >
+                  <XCircle size={12} />
+                  Cancel
+                </button>
+              )}
           </div>
         )}
 

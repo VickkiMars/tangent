@@ -39,7 +39,7 @@ def start_servers():
     # Use PORT from environment if available (Railway uses $PORT)
     print(f"[*] Starting backend server on port {backend_port}...")
     backend_process = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", str(backend_port)],
+        [sys.executable, "-m", "uvicorn", "api.main:app", "--reload", "--host", "0.0.0.0", "--port", str(backend_port)],
         cwd=backend_dir
     )
 

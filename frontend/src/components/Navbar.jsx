@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal, CreditCard, Box, BookOpen, Clock, MessageCircle, Menu, X, PenTool, LogOut, User } from 'lucide-react';
+import { Terminal, CreditCard, Box, BookOpen, Clock, MessageCircle, Menu, X, PenTool, LogOut, User, Wrench } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Navbar = () => {
@@ -12,6 +12,7 @@ const Navbar = () => {
 
   const links = [
     { name: 'Chat', path: '/chat', icon: MessageCircle },
+    { name: 'Tools', path: '/tools', icon: Wrench },
     { name: 'Pricing', path: '/pricing', icon: CreditCard },
     { name: 'Docs', path: '/docs', icon: BookOpen },
   ];

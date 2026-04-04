@@ -21,6 +21,13 @@ def get_db_connection():
         if conn:
             conn.close()
 
+TOOL_SCHEMA_MIGRATIONS = """
+ALTER TABLE agent_tools ADD COLUMN IF NOT EXISTS schema_json JSONB;
+ALTER TABLE agent_tools ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'agent';
+ALTER TABLE agent_tools ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE agent_tools ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+"""
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS tenants (
     id VARCHAR(255) PRIMARY KEY,
@@ -114,10 +121,103 @@ def run_schema_migrations():
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)")
                 cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255)")
                 cur.execute("ALTER TABLE users DROP COLUMN IF EXISTS signup_ip")
+                # Migrate agent_tools: add new columns for rich tool metadata
+                cur.execute(TOOL_SCHEMA_MIGRATIONS)
             conn.commit()
         logger.info("db_schema_ready")
     except Exception as e:
         logger.error("db_migration_error", error=str(e))
+
+
+# --- Agent Tool CRUD ---
+
+def save_agent_tool(tool_id: str, name: str, description: str, python_code: str,
+                    schema_json: dict = None, source: str = "agent",
+                    tenant_id: str = "tenant_1") -> bool:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("INSERT INTO tenants (id, name) VALUES (%s, 'Default Org') ON CONFLICT DO NOTHING", (tenant_id,))
+                cur.execute("""
+                    INSERT INTO agent_tools (id, tenant_id, name, description, python_code, schema_json, source, is_approved, is_active)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE, TRUE)
+                    ON CONFLICT (id) DO UPDATE SET
+                        description = EXCLUDED.description,
+                        python_code = EXCLUDED.python_code,
+                        schema_json = EXCLUDED.schema_json
+                """, (tool_id, tenant_id, name, description, python_code,
+                      json.dumps(schema_json) if schema_json else None, source))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error("save_agent_tool_error", error=str(e))
+        return False
+
+
+def get_all_agent_tools(tenant_id: str = "tenant_1") -> list:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT id, name, description, python_code, schema_json, source,
+                           is_approved, is_active, created_at
+                    FROM agent_tools
+                    WHERE tenant_id = %s
+                    ORDER BY created_at DESC
+                """, (tenant_id,))
+                rows = cur.fetchall()
+                return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error("get_all_agent_tools_error", error=str(e))
+        return []
+
+
+def get_agent_tool_by_id(tool_id: str) -> dict:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT * FROM agent_tools WHERE id = %s", (tool_id,))
+                row = cur.fetchone()
+                return dict(row) if row else None
+    except Exception as e:
+        logger.error("get_agent_tool_by_id_error", error=str(e))
+        return None
+
+
+def delete_agent_tool(tool_id: str) -> bool:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM agent_tools WHERE id = %s", (tool_id,))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error("delete_agent_tool_error", error=str(e))
+        return False
+
+
+def set_agent_tool_approved(tool_id: str, approved: bool) -> bool:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE agent_tools SET is_approved = %s WHERE id = %s", (approved, tool_id))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error("set_agent_tool_approved_error", error=str(e))
+        return False
+
+
+def set_agent_tool_active(tool_id: str, active: bool) -> bool:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE agent_tools SET is_active = %s WHERE id = %s", (active, tool_id))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error("set_agent_tool_active_error", error=str(e))
+        return False
 
 def ensure_tenant_user(user_id: str, tenant_id: str = "tenant_1"):
     try:

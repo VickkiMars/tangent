@@ -9,8 +9,10 @@ import Features from './pages/Features';
 import Docs from './pages/Docs';
 import Chat from './pages/Chat';
 import Builder from './pages/Builder';
+import ToolRepository from './pages/ToolRepository';
 import Auth from './pages/Auth';
 import MarketingScreenshot from './pages/MarketingScreenshot';
+import MarketingComplexGraph from './pages/MarketingComplexGraph';
 import Notification from './components/Notification';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -28,7 +30,9 @@ function App() {
           <Route path="/tasks" element={<ProtectedRoute><TaskView /></ProtectedRoute>} />
           <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
           <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+          <Route path="/tools" element={<ProtectedRoute><ToolRepository /></ProtectedRoute>} />
           <Route path="/marketing" element={<MarketingScreenshot />} />
+          <Route path="/marketing-complex" element={<MarketingComplexGraph />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/docs" element={<Docs />} />
           <Route path="/login" element={<Auth />} />
