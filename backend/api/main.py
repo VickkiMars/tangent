@@ -42,7 +42,7 @@ from tools.filesystem_tools import FILESYSTEM_TOOLS
 from tools.shell_tools import SHELL_TOOLS
 from tools.adapters import LangchainAdapter
 
-from api.routes import auth, workflows, tools as tools_routes
+from api.routes import auth, workflows, tools as tools_routes, apps
 from infrastructure.telemetry import setup_telemetry, get_tracer
 
 setup_telemetry()
@@ -209,6 +209,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(workflows.router)
 app.include_router(tools_routes.router)
+app.include_router(apps.router)
 
 if os.path.exists("static"):
     app.mount("/", StaticFiles(directory="static", html=True), name="static")

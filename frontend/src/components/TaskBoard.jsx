@@ -240,6 +240,37 @@ const TaskBoard = ({ defaultTaskId = null }) => {
     }
   };
 
+  const saveAsApp = async () => {
+    if (!workflowState || !workflowState.manifest) return;
+    const currentName = threads.find(t => t.id === selectedId)?.name || 'My New App';
+    const appName = window.prompt("Enter a name for this app:", currentName);
+    if (!appName) return;
+
+    try {
+      const res = await fetch(`${API_URL}/apps`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          name: appName,
+          visual_layout: {},
+          synthesis_manifest: workflowState.manifest
+        })
+      });
+      if (res.ok) {
+        notify('App saved successfully! You can view it in My Apps.', 'success');
+      } else {
+        const data = await res.json();
+        notify(data.detail || 'Failed to save app', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      notify('Failed to save app', 'error');
+    }
+  };
+
   return (
     <div
       className="h-[calc(100dvh-5rem)] sm:h-[calc(100vh-6rem)] w-full max-w-[1920px] mx-auto grid grid-cols-12 gap-2 sm:gap-4 lg:gap-6 p-2 sm:p-4 lg:p-6 font-sans text-sm bg-[#000000]"
@@ -355,6 +386,16 @@ const TaskBoard = ({ defaultTaskId = null }) => {
               >
                 <XCircle size={12} />
                 Cancel Task
+              </button>
+            )}
+
+            {(workflowState?.status === 'completed') && (
+              <button
+                onClick={saveAsApp}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-all text-[10px] font-bold uppercase tracking-wide"
+              >
+                <Box size={12} />
+                Save as App
               </button>
             )}
           </div>

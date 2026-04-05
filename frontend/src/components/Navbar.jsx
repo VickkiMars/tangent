@@ -12,6 +12,7 @@ const Navbar = () => {
 
   const links = [
     { name: 'Chat', path: '/chat', icon: MessageCircle },
+    { name: 'My Apps', path: '/apps', icon: Box },
     { name: 'Tools', path: '/tools', icon: Wrench },
     { name: 'Pricing', path: '/pricing', icon: CreditCard },
     { name: 'Docs', path: '/docs', icon: BookOpen },

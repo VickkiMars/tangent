@@ -370,3 +370,64 @@ def update_thread_status(thread_id: str, status: str):
     except Exception as e:
         logger.error("update_thread_status_error", thread_id=thread_id, error=str(e))
 
+# --- Apps (Predefined Workflows) CRUD ---
+
+def save_app(app_id: str, tenant_id: str, name: str, visual_layout: dict, synthesis_manifest: dict) -> bool:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("INSERT INTO tenants (id, name) VALUES (%s, 'Default Org') ON CONFLICT DO NOTHING", (tenant_id,))
+                cur.execute("""
+                    INSERT INTO predefined_workflows (id, tenant_id, name, visual_layout, synthesis_manifest, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        visual_layout = EXCLUDED.visual_layout,
+                        synthesis_manifest = EXCLUDED.synthesis_manifest,
+                        updated_at = NOW()
+                """, (app_id, tenant_id, name, json.dumps(visual_layout), json.dumps(synthesis_manifest)))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error("save_app_error", error=str(e))
+        return False
+
+def get_apps(tenant_id: str = "tenant_1") -> list:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT id, name, visual_layout, synthesis_manifest, created_at, updated_at
+                    FROM predefined_workflows
+                    WHERE tenant_id = %s
+                    ORDER BY updated_at DESC
+                """, (tenant_id,))
+                rows = cur.fetchall()
+                return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error("get_apps_error", error=str(e))
+        return []
+
+def get_app_by_id(app_id: str) -> dict:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT * FROM predefined_workflows WHERE id = %s", (app_id,))
+                row = cur.fetchone()
+                return dict(row) if row else None
+    except Exception as e:
+        logger.error("get_app_by_id_error", error=str(e))
+        return None
+
+def delete_app(app_id: str) -> bool:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM predefined_workflows WHERE id = %s", (app_id,))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error("delete_app_error", error=str(e))
+        return False
+
+
