@@ -5,25 +5,27 @@ import {
   Clock, DollarSign, X, Download, ChevronDown, ChevronUp,
   Box, Layers, GitBranch, UserCheck, Activity, XCircle
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as _motion, AnimatePresence } from 'framer-motion';
 import GraphView from './GraphView';
 import { notify } from './Notification';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // ─── Colours ──────────────────────────────────────────────────────────────────
-const C = {
+const _C = {
   cyan:  '#FFFFFF', orange: '#FF8A00', green: '#10B981',
   red:   '#EF4444', blue:  '#0066FF', muted: '#71717A',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getEventIcon(type, subtype) {
-  if (type==='SYSTEM') return <Cpu size={13} style={{ color:C.muted }} />;
-  if (type==='TOOL')   return <Wrench size={13} style={{ color:C.orange }} />;
+  if (type==='SYSTEM') return <Cpu size={13} style={{ color:_C.muted }} />;
+  if (type==='TOOL')   return <Wrench size={13} style={{ color:_C.orange }} />;
   if (type==='AGENT') {
-    if (subtype==='spawn')       return <div style={{ width:8, height:8, borderRadius:'50%', background:C.cyan,   boxShadow:`0 0 8px ${C.cyan}` }} />;
-    if (subtype==='termination') return <div style={{ width:8, height:8, borderRadius:'50%', background:C.muted }} />;
-    if (subtype==='hibernate')   return <div style={{ width:8, height:8, borderRadius:'50%', background:C.orange, boxShadow:`0 0 8px ${C.orange}` }} />;
-    return <MessageSquare size={13} style={{ color:C.cyan }} />;
+    if (subtype==='spawn')       return <div style={{ width:8, height:8, borderRadius:'50%', background:_C.cyan,   boxShadow:`0 0 8px ${_C.cyan}` }} />;
+    if (subtype==='termination') return <div style={{ width:8, height:8, borderRadius:'50%', background:_C.muted }} />;
+    if (subtype==='hibernate')   return <div style={{ width:8, height:8, borderRadius:'50%', background:_C.orange, boxShadow:`0 0 8px ${_C.orange}` }} />;
+    return <MessageSquare size={13} style={{ color:_C.cyan }} />;
   }
   return <div style={{ width:8, height:8, borderRadius:'50%', background:'#fff' }} />;
 }
@@ -46,10 +48,7 @@ function mapBackendEvent(msg) {
 
   // Formatting for UI
   if (subtype === 'inform') {
-    content = `💬 "${content}"`;
     subtype = 'message';
-  } else if (subtype === 'hibernate') {
-    content = `⏸ Hibernated: ${msg.sender_id}\nAwaiting human decision\n${content}`;
   }
 
   return {
@@ -66,7 +65,8 @@ function mapBackendEvent(msg) {
 }
 
 // ─── Tab button ───────────────────────────────────────────────────────────────
-function Tab({ label, icon: Icon, active, onClick, badge = 0 }) {
+// eslint-disable-next-line no-unused-vars
+function Tab({ label, icon: _Icon, active, onClick, badge = 0 }) {
   return (
     <button
       onClick={onClick}
@@ -74,7 +74,7 @@ function Tab({ label, icon: Icon, active, onClick, badge = 0 }) {
         active ? 'bg-white text-black shadow-[0_0_14px_rgba(255,255,255,0.25)]' : 'text-[#71717A] hover:text-white'
       }`}
     >
-      <Icon size={10} />
+      <_Icon size={10} />
       {label}
       {badge > 0 && (
         <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#FF8A00] text-black text-[8px] font-black flex items-center justify-center leading-none">
@@ -311,7 +311,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
 
         <div className="flex-grow overflow-y-auto space-y-3 pr-1 min-h-0">
           {threads.map((thread, idx) => (
-            <motion.div
+            <_motion.div
               key={thread.id}
               initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay: idx * 0.04 }}
               onClick={() => setSelectedId(thread.id)}
@@ -346,7 +346,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
                 </span>
                 <span className="text-[10px] text-[#71717A] font-mono ml-auto">{thread.time}</span>
               </div>
-            </motion.div>
+            </_motion.div>
           ))}
         </div>
       </div>
@@ -416,10 +416,10 @@ const TaskBoard = ({ defaultTaskId = null }) => {
             <div className="absolute left-[36px] sm:left-[52px] top-4 sm:top-8 bottom-4 sm:bottom-8 w-px bg-gradient-to-b from-transparent via-white/[0.08] to-transparent" />
             <AnimatePresence>
               {filteredEvents.length === 0 ? (
-                <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
+                <_motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
                   className="text-center text-[#71717A] py-20 font-mono text-xs">
                   [No events matching filter criteria]
-                </motion.div>
+                </_motion.div>
               ) : filteredEvents.map((evt, idx) => (
                 <TimelineEvent key={evt.id} evt={evt} idx={idx}
                   onInspect={() => setInspectorData(evt)} getEventIcon={getEventIcon} />
@@ -439,7 +439,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
         {centerTab === 'input' && (
           <div className="flex-grow overflow-y-auto p-8 space-y-6">
             {pendingInputs.length === 0 ? (
-              <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
+              <_motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
                 className="flex flex-col items-center justify-center h-full text-center pb-10">
                 <div className="w-16 h-16 rounded-full bg-[#1A1A1A] flex items-center justify-center mb-4 border border-white/[0.06]">
                   <UserCheck size={24} className="text-[#71717A]" />
@@ -448,9 +448,9 @@ const TaskBoard = ({ defaultTaskId = null }) => {
                 <p className="text-xs text-[#71717A] max-w-[220px] leading-relaxed">
                   Agents that request human feedback will appear here while hibernated.
                 </p>
-              </motion.div>
+              </_motion.div>
             ) : pendingInputs.map(evt => (
-              <motion.div key={evt.id} initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }}
+              <_motion.div key={evt.id} initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }}
                 className="rounded-[20px] border border-[#FF8A00]/35 p-6 relative overflow-hidden"
                 style={{ background:'linear-gradient(135deg,rgba(255,138,0,0.05),#0E0E0E)' }}>
                 <div className="absolute inset-0 pointer-events-none"
@@ -466,7 +466,9 @@ const TaskBoard = ({ defaultTaskId = null }) => {
                     )}
                   </div>
                   <p className="font-mono text-[10px] text-[#71717A] mb-3">{evt.agent_id}</p>
-                  <p className="text-sm text-[#E2E8F0] leading-relaxed mb-5">{evt.reason}</p>
+                  <div className="text-sm text-[#E2E8F0] leading-relaxed mb-5 markdown-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{evt.reason || ''}</ReactMarkdown>
+                  </div>
 
                   {humanResponses[evt.agent_id] ? (
                     <div className="bg-[#0A1A0A] border border-[#10B981]/20 rounded-[12px] px-4 py-3">
@@ -493,7 +495,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
                     </div>
                   )}
                 </div>
-              </motion.div>
+              </_motion.div>
             ))}
           </div>
         )}
@@ -513,7 +515,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
 
           <AnimatePresence mode="wait">
             {!inspectorData ? (
-              <motion.div key="empty" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+              <_motion.div key="empty" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
                 className="flex-grow flex flex-col items-center justify-center text-center p-8 text-[#71717A]">
                 <div className="w-16 h-16 rounded-full bg-[#1A1A1A] flex items-center justify-center mb-4 border border-white/[0.05]">
                   <Box size={22} className="opacity-40" />
@@ -522,9 +524,9 @@ const TaskBoard = ({ defaultTaskId = null }) => {
                 <p className="text-xs opacity-50 max-w-[190px] leading-relaxed">
                   Click an event on the timeline to inspect its full payload.
                 </p>
-              </motion.div>
+              </_motion.div>
             ) : (
-              <motion.div key={inspectorData.id}
+              <_motion.div key={inspectorData.id}
                 initial={{ x:16, opacity:0 }} animate={{ x:0, opacity:1 }} exit={{ x:16, opacity:0 }}
                 className="flex-grow overflow-y-auto p-6 space-y-5">
 
@@ -588,7 +590,7 @@ const TaskBoard = ({ defaultTaskId = null }) => {
                     </pre>
                   </div>
                 </div>
-              </motion.div>
+              </_motion.div>
             )}
           </AnimatePresence>
         </div>
@@ -604,7 +606,7 @@ const TimelineEvent = ({ evt, idx, onInspect, getEventIcon }) => {
   const isTool  = evt.type === 'TOOL';
 
   return (
-    <motion.div
+    <_motion.div
       initial={{ opacity:0, x:-16 }} animate={{ opacity:1, x:0 }}
       transition={{ delay: idx * 0.04, type:'spring', stiffness:300, damping:24 }}
       className="relative pl-10 sm:pl-14 group"
@@ -636,8 +638,8 @@ const TimelineEvent = ({ evt, idx, onInspect, getEventIcon }) => {
           </span>
         </div>
 
-        <div className="text-sm text-[#E2E8F0] whitespace-pre-wrap leading-7 font-mono pl-1" onClick={onInspect}>
-          {evt.content}
+        <div className="text-sm text-[#E2E8F0] leading-relaxed markdown-body pl-1" onClick={onInspect}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{evt.content || ''}</ReactMarkdown>
         </div>
 
         {/* Expand agent message */}
@@ -652,11 +654,11 @@ const TimelineEvent = ({ evt, idx, onInspect, getEventIcon }) => {
             </button>
             <AnimatePresence>
               {expanded && (
-                <motion.div initial={{ height:0, opacity:0 }} animate={{ height:'auto', opacity:1 }} exit={{ height:0, opacity:0 }} className="overflow-hidden">
+                <_motion.div initial={{ height:0, opacity:0 }} animate={{ height:'auto', opacity:1 }} exit={{ height:0, opacity:0 }} className="overflow-hidden">
                   <div className="mt-3 p-4 bg-[#050508] rounded-[12px] border border-white/[0.07] text-xs font-mono text-[#A1A1AA] whitespace-pre-wrap shadow-inner">
                     {evt.details?.raw_response ? JSON.stringify(evt.details.raw_response, null, 2) : 'Full response would appear here…'}
                   </div>
-                </motion.div>
+                </_motion.div>
               )}
             </AnimatePresence>
           </div>
@@ -669,7 +671,7 @@ const TimelineEvent = ({ evt, idx, onInspect, getEventIcon }) => {
           </div>
         )}
       </div>
-    </motion.div>
+    </_motion.div>
   );
 };
 

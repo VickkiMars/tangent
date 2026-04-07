@@ -77,28 +77,29 @@ def create_tool(
     except Exception as e:
         return f"REGISTRY ERROR: Tool compiled but failed to register: {e}"
 
-    # --- 5. Persist to database ---
+    # --- 5. Persist to Modular Skills Directory ---
     try:
-        from infrastructure.db import save_agent_tool
-        tool_id = f"tool_{uuid.uuid4().hex[:12]}"
-        save_agent_tool(
-            tool_id=tool_id,
-            name=name,
-            description=description,
-            python_code=code,
-            schema_json=parameters_schema,
-            source="agent",
-        )
-        logger.info("tool_persisted_db", tool=name, tool_id=tool_id)
+        import os
+        skills_dir = os.path.join(os.path.dirname(__file__), "..", "skills")
+        os.makedirs(skills_dir, exist_ok=True)
+        file_path = os.path.join(skills_dir, f"{name}.py")
+        
+        with open(file_path, "w") as f:
+            f.write(f'\"\"\"\n{description}\n\"\"\"\n\n')
+            f.write(code)
+            f.write('\n\n')
+            # Export minimal schema info for the loader
+            f.write(f'TOOL_NAME = "{name}"\n')
+            
+        logger.info("tool_persisted_skills_dir", tool=name, path=file_path)
     except Exception as e:
-        # Registry already has it — DB failure is non-fatal but worth reporting
         return (
             f"PARTIAL SUCCESS: Tool '{name}' is active for this session but "
-            f"could not be persisted to the database: {e}"
+            f"could not be persisted to the filesystem: {e}"
         )
 
     return (
-        f"SUCCESS: Tool '{name}' compiled, registered, and persisted (id={tool_id}). "
+        f"SUCCESS: Tool '{name}' compiled, registered, and persisted to skills/{name}.py. "
         f"It is immediately available to all agents and will reload on restart."
     )
 

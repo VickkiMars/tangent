@@ -81,6 +81,7 @@ async def execute_workflow_task(session_id: str, objective: str, provider: str =
             "patch_file": "gpt-4o",
             "run_shell": "gpt-4o",
             "reasoning": "gpt-4o",
+            "generate_deterministic_workflow": "gpt-4o",
             "creative_writing": "claude-3-5-sonnet-latest",
             "default": "gemini-3.1-flash-lite-preview"
         }
@@ -101,7 +102,7 @@ async def execute_workflow_task(session_id: str, objective: str, provider: str =
             best_model = PROVIDER_ROUTING["default"]
             best_provider = "google"
             
-            if "compile_python_tool" in injected:
+            if "compile_python_tool" in injected or "generate_deterministic_workflow" in injected:
                 best_model, best_provider = PROVIDER_ROUTING["compile_python_tool"], "openai"
             elif not injected and getattr(bp, "include_history", False):
                 best_model, best_provider = PROVIDER_ROUTING["creative_writing"], "anthropic"

@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as _motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   Send, Plus, CheckCircle, AlertCircle, ArrowRight,
-  PauseCircle, Terminal, Loader, Zap, Menu, ChevronDown, Sparkles, ExternalLink, XCircle
+  PauseCircle, Terminal, Loader, Zap, Menu, ChevronDown, Sparkles, ExternalLink, XCircle, Copy, Check
 } from 'lucide-react';
 import { notify } from '../components/Notification';
 
@@ -29,49 +29,64 @@ const STATUS_MAP = {
 };
 
 const PERF_META = {
-  inform:    { label: 'RESULT',      border: '#FFFFFF', Icon: CheckCircle },
-  failure:   { label: 'FAILURE',     border: '#EF4444', Icon: AlertCircle },
-  hibernate: { label: 'NEEDS INPUT', border: '#FF8A00', Icon: PauseCircle },
-  request:   { label: 'REQUEST',     border: '#0066FF', Icon: ArrowRight  },
-  default:   { label: 'EVENT',       border: '#71717A', Icon: Terminal    },
+  inform:    { label: 'RESULT',      border: '#FFFFFF', Icon: CheckCircle, bg: 'rgba(255,255,255,0.03)' },
+  failure:   { label: 'FAILURE',     border: '#EF4444', Icon: AlertCircle, bg: 'rgba(239,68,68,0.03)'  },
+  hibernate: { label: 'NEEDS INPUT', border: '#FF8A00', Icon: PauseCircle, bg: 'rgba(255,138,0,0.03)' },
+  request:   { label: 'REQUEST',     border: '#0066FF', Icon: ArrowRight,  bg: 'rgba(0,102,255,0.03)' },
+  default:   { label: 'EVENT',       border: '#71717A', Icon: Terminal,    bg: 'rgba(113,113,122,0.03)' },
 };
 
 function fmtTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-// ─── SessionItem ──────────────────────────────────────────────────────────────
+// ─── SessionItem (sidebar) ───────────────────────────────────────────────────
 function SessionItem({ session, active, onClick }) {
   const s = STATUS_MAP[session.status] || STATUS_MAP.completed;
   return (
-    <motion.button
+    <_motion.button
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       onClick={onClick}
-      className={`w-full text-left p-4 rounded-[16px] border transition-all duration-300 relative overflow-hidden ${
+      className={`w-full text-left p-3.5 rounded-[16px] border transition-all duration-300 relative overflow-hidden ${
         active
-          ? 'bg-[#1A1A1A] border-white/30 shadow-[0_0_18px_rgba(255,255,255,0.06)]'
-          : 'bg-[#0E0E0E] border-white/[0.06] hover:border-white/20 hover:bg-[#141414]'
+          ? 'bg-[#1A1A1A] border-white/20 shadow-[0_0_18px_rgba(255,255,255,0.04)]'
+          : 'bg-[#0E0E0E] border-white/[0.04] hover:border-white/15 hover:bg-[#121212]'
       }`}
     >
       {active && (
-        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-white shadow-[0_0_8px_#FFFFFF] rounded-l-[16px]" />
+        <div className="absolute left-0 top-0 bottom-0 w-[2.5px] bg-white shadow-[0_0_8px_#FFFFFF] rounded-l-[16px]" />
       )}
-      <p className={`font-mono text-[10px] mb-1.5 truncate ${active ? 'text-white' : 'text-[#71717A]'}`}>
-        {session.id.slice(0, 22)}…
-      </p>
-      <p className="text-sm font-medium text-white leading-snug line-clamp-2 mb-3">{session.name}</p>
+      <p className="text-[13px] font-medium text-white leading-snug line-clamp-2 mb-2.5">{session.name}</p>
       <div className="flex items-center justify-between">
         <span
-          className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border"
-          style={{ color: s.color, borderColor: `${s.color}40`, background: `${s.color}10` }}
+          className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border"
+          style={{ color: s.color, borderColor: `${s.color}30`, background: `${s.color}05` }}
         >
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.color, boxShadow: `0 0 4px ${s.color}` }} />
           {s.label}
         </span>
-        <span className="font-mono text-[10px] text-[#71717A]">{session.ts}</span>
+        <span className="font-mono text-[9px] text-[#52525B]">{session.ts}</span>
       </div>
-    </motion.button>
+    </_motion.button>
+  );
+}
+
+// ─── UserMessage ──────────────────────────────────────────────────────────────
+function UserMessage({ text, ts }) {
+  return (
+    <_motion.div
+      initial={{ opacity: 0, x: 10, y: 5 }}
+      animate={{ opacity: 1, x: 0, y: 0 }}
+      className="flex flex-col items-end gap-2 my-6"
+    >
+      <div className="max-w-[85%] bg-white rounded-[20px] rounded-tr-[4px] px-5 py-3.5 shadow-[0_4px_24px_rgba(255,255,255,0.03)] border border-white/10">
+        <p className="text-sm text-black font-medium leading-relaxed">{text}</p>
+      </div>
+      <div className="flex items-center gap-2 px-2">
+        <span className="text-[9px] font-bold text-[#555] uppercase tracking-widest">You</span>
+        <span className="text-[9px] font-medium text-[#333] font-mono">{fmtTime(ts)}</span>
+      </div>
+    </_motion.div>
   );
 }
 
@@ -79,36 +94,59 @@ function SessionItem({ session, active, onClick }) {
 function EventCard({ event }) {
   const meta = PERF_META[event.performative] || PERF_META.default;
   const Icon = meta.Icon;
+  const isResult = event.performative === 'inform';
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    const text = event.payload?.natural_language || '';
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <motion.div
+    <_motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-[16px] border p-5 relative overflow-hidden"
-      style={{ background: '#0E0E0E', borderColor: `${meta.border}25` }}
+      className={`rounded-[20px] border p-4.5 relative overflow-hidden my-3 group/card ${isResult ? 'border-white/20' : 'border-white/[0.04]'}`}
+      style={{ background: meta.bg }}
     >
       <div
-        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-[16px]"
-        style={{ background: meta.border, boxShadow: `0 0 8px ${meta.border}` }}
+        className="absolute left-0 top-0 bottom-0 w-[2.5px] rounded-l-[20px]"
+        style={{ background: meta.border, boxShadow: `0 0 6px ${meta.border}50` }}
       />
-      <div className="pl-2">
+      
+      {/* Copy Button */}
+      <button
+        onClick={handleCopy}
+        className="absolute top-4 right-4 p-2 rounded-lg bg-white/[0.03] border border-white/[0.08] text-[#52525B] hover:text-white hover:bg-white/[0.08] transition-all opacity-0 group-hover/card:opacity-100 hidden sm:block"
+        title="Copy response"
+      >
+        {copied ? <Check size={12} className="text-[#10B981]" /> : <Copy size={12} />}
+      </button>
+
+      <div className="pl-1.5">
         <div className="flex items-center gap-2 mb-3">
-          <div className="p-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-            <Icon size={13} style={{ color: meta.border }} />
+          <div className="p-1 rounded-md bg-white/[0.04] border border-white/[0.08]">
+            <Icon size={12} style={{ color: meta.border }} />
           </div>
           <span
-            className="text-[9px] font-bold uppercase tracking-[0.12em] px-2 py-0.5 rounded-full border"
-            style={{ color: meta.border, borderColor: `${meta.border}40`, background: `${meta.border}10` }}
+            className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-full border"
+            style={{ color: meta.border, borderColor: `${meta.border}30`, background: `${meta.border}05` }}
           >
             {meta.label}
           </span>
-          <span className="font-mono text-[10px] text-[#71717A] ml-auto">{fmtTime(event.timestamp)}</span>
+          <span className="font-mono text-[9px] text-[#52525B] ml-auto mr-0 sm:mr-10">{fmtTime(event.timestamp)}</span>
         </div>
-        <p className="font-mono text-[10px] text-[#71717A] mb-2 truncate">{event.sender_id}</p>
-        <div className="text-sm text-[#E2E8F0] leading-relaxed">
-          <div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{event.payload?.natural_language || ''}</ReactMarkdown></div>
+        {event.sender_id && event.sender_id !== 'meta_agent' && (
+          <p className="font-mono text-[9px] text-[#52525B] mb-2 uppercase tracking-tighter opacity-70">Source: {event.sender_id.split('-')[0]}</p>
+        )}
+        <div className="text-[13px] text-[#D1D5DB] leading-relaxed markdown-body">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.payload?.natural_language || ''}</ReactMarkdown>
         </div>
       </div>
-    </motion.div>
+    </_motion.div>
   );
 }
 
@@ -126,10 +164,10 @@ function HibernatePrompt({ event, onSubmit }) {
   };
 
   return (
-    <motion.div
+    <_motion.div
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="rounded-[20px] border border-[#FF8A00]/40 p-6 relative overflow-hidden"
+      className="rounded-[18px] border border-[#FF8A00]/40 p-4 relative overflow-hidden my-3"
       style={{ background: 'linear-gradient(135deg, rgba(255,138,0,0.06), #0E0E0E)' }}
     >
       <div
@@ -144,8 +182,8 @@ function HibernatePrompt({ event, onSubmit }) {
           </span>
         </div>
         <p className="font-mono text-[10px] text-[#71717A] mb-3">{event.sender_id} · {event.thread_id}</p>
-        <div className="text-sm text-[#E2E8F0] leading-relaxed mb-5">
-          <div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{event.payload?.natural_language || ''}</ReactMarkdown></div>
+        <div className="text-[13px] text-[#E2E8F0] leading-relaxed mb-4 markdown-body">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.payload?.natural_language || ''}</ReactMarkdown>
         </div>
         <div className="flex gap-3">
           <input
@@ -158,14 +196,14 @@ function HibernatePrompt({ event, onSubmit }) {
           <button
             onClick={handleSubmit}
             disabled={!text.trim() || busy}
-            className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 disabled:opacity-40"
+            className="px-4 py-2 rounded-full text-xs font-semibold transition-all duration-300 disabled:opacity-40"
             style={{ background: '#FF8A00', color: '#000' }}
           >
-            {busy ? <Loader size={15} className="animate-spin" /> : 'Send'}
+            {busy ? <Loader size={12} className="animate-spin" /> : 'Confirm'}
           </button>
         </div>
       </div>
-    </motion.div>
+    </_motion.div>
   );
 }
 
@@ -260,7 +298,15 @@ export default function Chat() {
           const res = await fetch(`${API_URL}/workflows/${activeId}`, { headers: getAuthHeaders() });
           if (res.ok) {
             const data = await res.json();
-            setEventMap(prev => ({ ...prev, [activeId]: data.logs || [] }));
+            setEventMap(prev => {
+              const baseHistory = data.logs || [];
+              const obj = data.state?.original_objective;
+              const ts  = data.state?.timestamp || Date.now()/1000;
+              const historyWithObj = obj 
+                ? [{ type: 'human_message', content: obj, timestamp: ts }, ...baseHistory]
+                : baseHistory;
+              return { ...prev, [activeId]: historyWithObj };
+            });
           }
         } catch (err) {
           console.error("Failed to load history", err);
@@ -268,7 +314,7 @@ export default function Chat() {
       };
       fetchHistory();
     }
-  }, [activeId]);
+  }, [activeId, eventMap]);
 
   const connectWS = useCallback((sessionId) => {
     if (wsRef.current) {
@@ -309,36 +355,61 @@ export default function Chat() {
   const submitObjective = async () => {
     const text = objective.trim();
     if (!text || submitting) return;
+    
+    // Check if we should resume or start fresh
+    const isResume = activeId && (activeSession?.status === 'completed' || activeSession?.status === 'failed');
+    
     setSubmitting(true);
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 20000); // 20s for resume/architect
+
     try {
-      const res = await fetch(`${API_URL}/workflows`, {
+      const url = isResume ? `${API_URL}/workflows/${activeId}/resume` : `${API_URL}/workflows`;
+      const body = isResume 
+        ? JSON.stringify({ new_objective: text, provider, model })
+        : JSON.stringify({ objective: text, provider, model });
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ objective: text, provider, model }),
+        body,
         signal: controller.signal,
       });
       clearTimeout(timeout);
       if (!res.ok) throw new Error('non-2xx');
       const data = await res.json();
-      const session = {
-        id: data.session_id, name: text.slice(0, 60),
-        status: 'analyzing',
-        ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      newSessionIds.current.add(data.session_id);
-      setSessions(prev => [session, ...prev]);
-      setEventMap(prev => ({ ...prev, [data.session_id]: [] }));
-      setActiveId(data.session_id);
-      setObjective('');
-      connectWS(data.session_id);
+
+      if (isResume) {
+        // Just inject the user message locally and let WS handle the rest
+        setEventMap(prev => ({
+          ...prev,
+          [activeId]: [...(prev[activeId] || []), { type: 'human_message', content: text, timestamp: Date.now()/1000 }]
+        }));
+        setSessions(prev => prev.map(s => s.id === activeId ? { ...s, status: 'analyzing' } : s));
+        setObjective('');
+      } else {
+        const session = {
+          id: data.session_id, name: text.slice(0, 60),
+          status: 'analyzing',
+          ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          original_objective: text
+        };
+        newSessionIds.current.add(data.session_id);
+        setSessions(prev => [session, ...prev]);
+        setEventMap(prev => ({ 
+          ...prev, 
+          [data.session_id]: [{ type: 'human_message', content: text, timestamp: Date.now()/1000 }] 
+        }));
+        setActiveId(data.session_id);
+        setObjective('');
+        connectWS(data.session_id);
+      }
       setDemoMode(false);
     } catch (err) {
       clearTimeout(timeout);
       const msg = err.name === 'AbortError' ? 'Request timed out — backend may be unavailable' : err.message;
-      console.error("Backend unavailable - Submission failed:", err);
-      notify(`Workflow Submission Failed: ${msg}`, 'error');
+      console.error("Submission failed:", err);
+      notify(`Submission Failed: ${msg}`, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -518,7 +589,7 @@ export default function Chat() {
         )}
 
         {/* Event feed */}
-        <div ref={scrollRef} className="flex-grow overflow-y-auto px-4 sm:px-8 py-5 sm:py-8 space-y-4">
+        <div ref={scrollRef} className="flex-grow overflow-y-auto px-4 sm:px-8 py-5 sm:py-8 space-y-2 max-w-4xl mx-auto w-full">
           {!activeId ? (
             <EmptyState onQuickStart={(q) => { setObjective(q); textareaRef.current?.focus(); }} />
           ) : activeEvents.length === 0 ? (
@@ -527,15 +598,20 @@ export default function Chat() {
               <p className="text-sm text-[#71717A]">Orchestrating agents…</p>
             </div>
           ) : (
-            <AnimatePresence initial={false}>
-              {activeEvents.map((evt, i) =>
-                evt.performative === 'hibernate' ? (
-                  <HibernatePrompt key={evt.id ?? i} event={evt} onSubmit={submitHumanInput} />
-                ) : (
-                  <EventCard key={evt.id ?? i} event={evt} />
-                )
-              )}
-            </AnimatePresence>
+            <div className="flex flex-col">
+              <AnimatePresence initial={false}>
+                {activeEvents.map((evt, i) => {
+                  if (evt.type === 'human_message') {
+                    return <UserMessage key={evt.id ?? i} text={evt.content} ts={evt.timestamp} />;
+                  }
+                  return evt.performative === 'hibernate' ? (
+                    <HibernatePrompt key={evt.id ?? i} event={evt} onSubmit={submitHumanInput} />
+                  ) : (
+                    <EventCard key={evt.id ?? i} event={evt} />
+                  );
+                })}
+              </AnimatePresence>
+            </div>
           )}
         </div>
 

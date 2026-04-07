@@ -42,7 +42,7 @@ from tools.filesystem_tools import FILESYSTEM_TOOLS
 from tools.shell_tools import SHELL_TOOLS
 from tools.adapters import LangchainAdapter
 
-from api.routes import auth, workflows, tools as tools_routes, apps
+from api.routes import auth, workflows, tools as tools_routes, apps, deterministic
 from infrastructure.telemetry import setup_telemetry, get_tracer
 
 setup_telemetry()
@@ -122,6 +122,15 @@ def register_browser_tools(registry):
     except Exception as e:
         logger.warning("create_tool_skipped", reason=str(e))
 
+    try:
+        from tools.deterministic_tool import generate_deterministic_workflow
+        from langchain_core.tools import StructuredTool
+        det_tool = StructuredTool.from_function(func=generate_deterministic_workflow)
+        registry.register_adapter(LangchainAdapter(tools=[det_tool]))
+        logger.info("tool_registered", tool="generate_deterministic_workflow")
+    except Exception as e:
+        logger.warning("generate_deterministic_workflow_skipped", reason=str(e))
+
 def load_dynamic_tools(registry):
     try:
         import agent_tools
@@ -144,36 +153,17 @@ def load_dynamic_tools(registry):
         logger.error("dynamic_tools_error", error=str(e))
 
 
-def load_tools_from_db(registry):
-    """Load active agent-created tools from the database and register them at startup."""
+def load_tools_from_skills_dir(registry):
+    """Load active agent-created tools from the modular filesystem skills directory."""
     try:
-        from infrastructure.db import get_all_agent_tools
-        tools = get_all_agent_tools()
-        loaded = 0
-        for tool in tools:
-            if not tool.get("is_active", True):
-                continue
-            name = tool["name"]
-            if name in registry._registry:
-                continue  # Built-in or already loaded from agent_tools.py takes precedence
-            try:
-                namespace = {}
-                exec(compile(tool["python_code"], "<db_tool>", "exec"), namespace)
-                func = namespace.get(name)
-                if func:
-                    schema = tool.get("schema_json") or {}
-                    registry.register(name, func, schema)
-                    loaded += 1
-            except Exception as e:
-                logger.warning("db_tool_load_failed", tool=name, error=str(e))
-        if loaded:
-            logger.info("db_tools_loaded", count=loaded)
+        from engine.skills_loader import load_skills_from_directory
+        load_skills_from_directory(registry, "skills")
     except Exception as e:
-        logger.warning("load_tools_from_db_failed", error=str(e))
+        logger.warning("load_tools_from_skills_dir_failed", error=str(e))
 
 register_browser_tools(registry)
 load_dynamic_tools(registry)
-load_tools_from_db(registry)
+load_tools_from_skills_dir(registry)
 
 
 @asynccontextmanager
@@ -210,6 +200,7 @@ app.include_router(auth.router)
 app.include_router(workflows.router)
 app.include_router(tools_routes.router)
 app.include_router(apps.router)
+app.include_router(deterministic.router)
 
 if os.path.exists("static"):
     app.mount("/", StaticFiles(directory="static", html=True), name="static")

@@ -361,6 +361,8 @@ class JITCompiler:
             start_time = time.time()
             prompt_tokens = 0
             completion_tokens = 0
+            cache_read_tokens = 0
+            cache_creation_tokens = 0
             total_cost = 0.0
             tools_used = []
             
@@ -417,8 +419,15 @@ class JITCompiler:
                     try:
                         cost = completion_cost(completion_response=llm_response)
                         total_cost += cost
-                        prompt_tokens += getattr(llm_response.usage, 'prompt_tokens', 0)
-                        completion_tokens += getattr(llm_response.usage, 'completion_tokens', 0)
+                        
+                        usage = getattr(llm_response, 'usage', None)
+                        if usage:
+                            prompt_tokens += getattr(usage, 'prompt_tokens', 0)
+                            completion_tokens += getattr(usage, 'completion_tokens', 0)
+                            
+                            # Provider-specific cache variables
+                            cache_read_tokens += getattr(usage, 'cache_read_input_tokens', getattr(usage, 'prompt_cache_hit_tokens', 0))
+                            cache_creation_tokens += getattr(usage, 'cache_creation_input_tokens', getattr(usage, 'prompt_cache_miss_tokens', 0))
                         
                         # Check budget mid-flight
                         if await asyncio.to_thread(check_budget_exceeded, self._user_id, cost):
@@ -572,7 +581,7 @@ class JITCompiler:
                         await asyncio.to_thread(
                             record_agent_analytics,
                             task.task_id, agent_id, task.task_id, getattr(blueprint, "provider", "openai"), getattr(blueprint, "model", "gpt-4o"),
-                            prompt_tokens, completion_tokens, total_cost, tools_used, False, lifetime,
+                            prompt_tokens, completion_tokens, cache_read_tokens, cache_creation_tokens, total_cost, tools_used, False, lifetime,
                             self._user_id, self._tenant_id
                         )
 
@@ -606,7 +615,7 @@ class JITCompiler:
             await asyncio.to_thread(
                 record_agent_analytics,
                 task.task_id, agent_id, task.task_id, getattr(blueprint, "provider", "openai"), getattr(blueprint, "model", "gpt-4o"),
-                prompt_tokens, completion_tokens, total_cost, tools_used, True, lifetime,
+                prompt_tokens, completion_tokens, cache_read_tokens, cache_creation_tokens, total_cost, tools_used, True, lifetime,
                 self._user_id, self._tenant_id
             )
 

@@ -106,3 +106,27 @@ class ResumeWorkflowRequest(BaseModel):
     new_objective: str
     provider: str = "google"
     model: str = "gemini-3.1-flash-lite-preview"
+
+
+# 7. Deterministic Workflow Engine
+class WorkflowStep(BaseModel):
+    name: str = Field(description="Step name, used as the function name")
+    description: str = Field(description="What this step does")
+    input_schema: Dict[str, str] = Field(description="Input field names mapped to type strings")
+    output_schema: Dict[str, str] = Field(description="Output field names mapped to type strings")
+    code: str = Field(description="Pure Python function returning a dict matching output_schema")
+
+class DeterministicWorkflow(BaseModel):
+    workflow: List[WorkflowStep] = Field(description="Ordered list of pure-function steps")
+
+class DeterministicWorkflowRequest(BaseModel):
+    objective: str = Field(description="What the workflow should compute")
+    initial_input: Dict[str, Any] = Field(description="Initial data to feed into the first step")
+    provider: str = "google"
+    model: str = "gemini-1.5-flash"
+
+class DeterministicWorkflowResponse(BaseModel):
+    session_id: str
+    workflow_steps: List[Dict[str, Any]]
+    execution_trace: List[Dict[str, Any]]
+    final_context: Dict[str, Any]

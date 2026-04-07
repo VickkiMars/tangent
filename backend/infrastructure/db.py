@@ -28,6 +28,11 @@ ALTER TABLE agent_tools ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 ALTER TABLE agent_tools ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
 """
 
+ANALYTICS_SCHEMA_MIGRATIONS = """
+ALTER TABLE agent_analytics ADD COLUMN IF NOT EXISTS tokens_cache_read INTEGER DEFAULT 0;
+ALTER TABLE agent_analytics ADD COLUMN IF NOT EXISTS tokens_cache_creation INTEGER DEFAULT 0;
+"""
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS tenants (
     id VARCHAR(255) PRIMARY KEY,
@@ -94,6 +99,8 @@ CREATE TABLE IF NOT EXISTS agent_analytics (
     model VARCHAR(100),
     tokens_prompt INTEGER DEFAULT 0,
     tokens_completion INTEGER DEFAULT 0,
+    tokens_cache_read INTEGER DEFAULT 0,
+    tokens_cache_creation INTEGER DEFAULT 0,
     cost_usd DECIMAL(10, 6) DEFAULT 0.0,
     tools_called JSONB DEFAULT '[]',
     was_successful BOOLEAN DEFAULT TRUE,
@@ -123,6 +130,8 @@ def run_schema_migrations():
                 cur.execute("ALTER TABLE users DROP COLUMN IF EXISTS signup_ip")
                 # Migrate agent_tools: add new columns for rich tool metadata
                 cur.execute(TOOL_SCHEMA_MIGRATIONS)
+                # Migrate analytics: add cache tokens
+                cur.execute(ANALYTICS_SCHEMA_MIGRATIONS)
             conn.commit()
         logger.info("db_schema_ready")
     except Exception as e:
@@ -278,7 +287,7 @@ def get_user_by_email(email: str):
         return None
 
 
-def record_agent_analytics(thread_id, agent_id, target_task_id, provider, model, tokens_prompt, tokens_completion, cost, tools_called, was_successful, lifetime, user_id="dev_user", tenant_id="tenant_1"):
+def record_agent_analytics(thread_id, agent_id, target_task_id, provider, model, tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_creation, cost, tools_called, was_successful, lifetime, user_id="dev_user", tenant_id="tenant_1"):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -288,12 +297,14 @@ def record_agent_analytics(thread_id, agent_id, target_task_id, provider, model,
                 cur.execute("""
                     INSERT INTO agent_analytics (
                         thread_id, agent_id, target_task_id, provider, model, 
-                        tokens_prompt, tokens_completion, cost_usd, tools_called, 
+                        tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_creation, 
+                        cost_usd, tools_called, 
                         was_successful, lifetime_seconds
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     thread_id, agent_id, target_task_id, provider, model,
-                    tokens_prompt, tokens_completion, cost, json.dumps(tools_called),
+                    tokens_prompt, tokens_completion, tokens_cache_read, tokens_cache_creation,
+                    cost, json.dumps(tools_called),
                     was_successful, float(lifetime)
                 ))
                 conn.commit()
@@ -309,7 +320,8 @@ def get_workflow_analytics(thread_ids: list) -> list:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""
                     SELECT agent_id, target_task_id, provider, model, tokens_prompt, 
-                           tokens_completion, cost_usd, tools_called, was_successful, lifetime_seconds
+                           tokens_completion, tokens_cache_read, tokens_cache_creation, 
+                           cost_usd, tools_called, was_successful, lifetime_seconds
                     FROM agent_analytics
                     WHERE thread_id = ANY(%s)
                 """, (thread_ids,))
