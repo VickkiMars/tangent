@@ -18,6 +18,7 @@ from engine.blackboard import EventBlackboard
 from tools.registry import GlobalToolRegistry
 from infrastructure.telemetry import get_tracer
 from infrastructure.llm_provider import LLMFactory
+from engine.personas import get_persona_prompt
 
 logger = structlog.get_logger(__name__)
 tracer = get_tracer(__name__)
@@ -31,6 +32,18 @@ class JITCompiler:
         self.hibernated_task_ids: set = set()
         self._user_id: str = "dev_user"
         self._tenant_id: str = "tenant_1"
+
+    def _resolve_persona_prompt(self, blueprint: AgentBlueprint) -> str:
+        """Resolves the persona prompt from persona_id or persona_prompt."""
+        if blueprint.persona_id:
+            fixed_prompt = get_persona_prompt(blueprint.persona_id)
+            if fixed_prompt:
+                # If both are provided, prepend the fixed prompt to the JIT prompt
+                if blueprint.persona_prompt:
+                    return f"{fixed_prompt}\n\nSpecific instructions for this task:\n{blueprint.persona_prompt}"
+                return fixed_prompt
+        
+        return blueprint.persona_prompt or "You are a helpful autonomous agent."
 
     @staticmethod
     def _normalize_message(msg) -> dict:
@@ -159,7 +172,7 @@ class JITCompiler:
                 llm_tool_schemas = self.registry.get_ephemeral_schemas(blueprint.injected_tools)
                 
                 messages = [
-                    {"role": "system", "content": blueprint.persona_prompt},
+                    {"role": "system", "content": self._resolve_persona_prompt(blueprint)},
                     {"role": "user", "content": f"Daemon started. Objective: {task.description}"}
                 ]
                 
@@ -348,7 +361,7 @@ class JITCompiler:
             else:
                 # Fresh start
                 messages = [
-                    {"role": "system", "content": blueprint.persona_prompt},
+                    {"role": "system", "content": self._resolve_persona_prompt(blueprint)},
                     {"role": "user", "content": execution_prompt}
                 ]
 
