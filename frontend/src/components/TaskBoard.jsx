@@ -104,6 +104,8 @@ const TaskBoard = ({ defaultTaskId = null }) => {
   const [centerTab, setCenterTab]           = useState('timeline'); // 'timeline' | 'graph' | 'input'
   const [humanResponses, setHumanResponses] = useState({}); // { agentId: responseText }
   const [mobilePanel, setMobilePanel]       = useState('main'); // 'threads' | 'main' | 'inspector'
+  const [showSaveModal, setShowSaveModal]   = useState(false);
+  const [saveAppData, setSaveAppData]       = useState({ name: '', variables: [] });
   
   // Real data state
   const [workflowState, setWorkflowState] = useState(null);
@@ -240,13 +242,33 @@ const TaskBoard = ({ defaultTaskId = null }) => {
     }
   };
 
-  const saveAsApp = async () => {
+  const saveAsApp = () => {
     if (!workflowState || !workflowState.manifest) return;
     const currentName = threads.find(t => t.id === selectedId)?.name || 'My New App';
-    const appName = window.prompt("Enter a name for this app:", currentName);
-    if (!appName) return;
+    setSaveAppData({ name: currentName, variables: [] });
+    setShowSaveModal(true);
+  };
 
+  const handleConfirmSaveApp = async () => {
+    if (!saveAppData.name.trim()) {
+      notify("App name is required", "error");
+      return;
+    }
     try {
+      const newManifest = JSON.parse(JSON.stringify(workflowState.manifest));
+      saveAppData.variables.forEach(variable => {
+        if (variable.key && variable.replace_text) {
+          newManifest.blueprints.forEach(bp => {
+            if (bp.persona_prompt) {
+              bp.persona_prompt = bp.persona_prompt.split(variable.replace_text).join(`{{${variable.key}}}`);
+            }
+          });
+        }
+      });
+      const parametersList = saveAppData.variables
+        .filter(v => v.key.trim() !== '')
+        .map(v => ({ key: v.key.trim() }));
+
       const res = await fetch(`${API_URL}/apps`, {
         method: 'POST',
         headers: {
@@ -254,13 +276,15 @@ const TaskBoard = ({ defaultTaskId = null }) => {
           ...getAuthHeaders()
         },
         body: JSON.stringify({
-          name: appName,
+          name: saveAppData.name,
           visual_layout: {},
-          synthesis_manifest: workflowState.manifest
+          synthesis_manifest: newManifest,
+          parameters: parametersList
         })
       });
       if (res.ok) {
         notify('App saved successfully! You can view it in My Apps.', 'success');
+        setShowSaveModal(false);
       } else {
         const data = await res.json();
         notify(data.detail || 'Failed to save app', 'error');
@@ -595,6 +619,113 @@ const TaskBoard = ({ defaultTaskId = null }) => {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* ── Save App Modal ───────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showSaveModal && (
+          <_motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <_motion.div
+              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              className="bg-[#0E0E0E] min-w-[320px] sm:min-w-[400px] border border-white/10 p-6 rounded-2xl shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setShowSaveModal(false)}
+                className="absolute top-4 right-4 text-[#71717A] hover:text-white"
+              >
+                <X size={16} />
+              </button>
+              <h3 className="text-xl font-bold text-white mb-4">Save as App</h3>
+              
+              <div className="space-y-4 text-left">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#71717A] mb-1">App Name</label>
+                  <input 
+                    type="text" 
+                    value={saveAppData.name}
+                    onChange={(e) => setSaveAppData({...saveAppData, name: e.target.value})}
+                    className="w-full bg-[#1A1A1A] border border-white/10 rounded-lg px-3 py-2 text-white outline-none focus:border-[#FF8A00]"
+                  />
+                </div>
+                
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold uppercase tracking-wide text-[#71717A]">Variables / Parameters</label>
+                    <button 
+                      onClick={() => setSaveAppData({ ...saveAppData, variables: [...saveAppData.variables, { key: '', replace_text: '' }] })}
+                      className="text-[#FF8A00] text-xs hover:underline"
+                    >
+                      + Add Variable
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-[#71717A] mb-2 leading-tight">
+                    Variables make this app reusable. Define a key (e.g. "TOPIC") and the exact word it should replace in your prompt (e.g. "bees").
+                  </p>
+                  
+                  {saveAppData.variables.map((v, i) => (
+                    <div key={i} className="flex items-center gap-2 mb-2">
+                      <input 
+                        type="text" 
+                        placeholder="Key (e.g. TOPIC)" 
+                        value={v.key}
+                        onChange={(e) => {
+                          const newV = [...saveAppData.variables];
+                          newV[i].key = e.target.value.toUpperCase();
+                          setSaveAppData({...saveAppData, variables: newV});
+                        }}
+                        className="w-1/3 bg-[#1A1A1A] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[#FF8A00]"
+                      />
+                      <span className="text-[#71717A]">=</span>
+                      <input 
+                        type="text" 
+                        placeholder="Word to replace (e.g. bees)" 
+                        value={v.replace_text}
+                        onChange={(e) => {
+                          const newV = [...saveAppData.variables];
+                          newV[i].replace_text = e.target.value;
+                          setSaveAppData({...saveAppData, variables: newV});
+                        }}
+                        className="flex-grow bg-[#1A1A1A] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-[#FF8A00]"
+                      />
+                      <button 
+                        onClick={() => {
+                          const newV = saveAppData.variables.filter((_, idx) => idx !== i);
+                          setSaveAppData({...saveAppData, variables: newV});
+                        }}
+                        className="text-[#EF4444] p-1"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  {saveAppData.variables.length === 0 && (
+                    <div className="text-center py-4 bg-[#1A1A1A]/50 rounded-lg border border-white/5 border-dashed">
+                      <span className="text-xs text-[#71717A]">No variables defined. App will run exactly as saved.</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-4 border-t border-white/10 gap-3">
+                  <button 
+                    onClick={() => setShowSaveModal(false)}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold text-[#71717A] hover:bg-white/5"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleConfirmSaveApp}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-white text-black hover:bg-gray-200"
+                  >
+                    Save App
+                  </button>
+                </div>
+              </div>
+            </_motion.div>
+          </_motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

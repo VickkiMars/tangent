@@ -2,7 +2,6 @@ a2wsgi==1.10.10
 absl-py==2.3.1
 accelerate==1.12.0
 addict==2.4.0
--e git+https://github.com/Panniantong/Agent-Reach.git@ca2e85520b6603941e2dffb91973d4360737e76a#egg=agent_reach
 aiofile==3.9.0
 aiofiles==25.1.0
 aiohappyeyeballs==2.6.1

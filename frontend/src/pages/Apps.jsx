@@ -7,6 +7,8 @@ const Apps = () => {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showDeployModal, setShowDeployModal] = useState(null);
+  const [deployParams, setDeployParams] = useState({});
   const navigate = useNavigate();
 
   const fetchApps = async () => {
@@ -35,7 +37,18 @@ const Apps = () => {
     fetchApps();
   }, []);
 
-  const handleDeploy = async (appId) => {
+  const handleDeployClick = (app) => {
+    if (app.parameters && app.parameters.length > 0) {
+      setShowDeployModal(app);
+      const initialParams = {};
+      app.parameters.forEach(p => initialParams[p.key] = '');
+      setDeployParams(initialParams);
+    } else {
+      executeDeploy(app.id, {});
+    }
+  };
+
+  const executeDeploy = async (appId, params) => {
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`http://localhost:8000/apps/${appId}/run`, {
@@ -46,13 +59,15 @@ const Apps = () => {
         },
         body: JSON.stringify({
           provider: 'google',
-          model: 'gemini-3.1-flash-lite-preview'
+          model: 'gemini-3.1-flash-lite-preview',
+          parameter_values: params
         })
       });
       
       if (!res.ok) throw new Error('Failed to deploy app');
       const data = await res.json();
       
+      setShowDeployModal(null);
       // Navigate to Workspace to monitor new session
       navigate(`/workspace?session_id=${data.session_id}`);
     } catch (err) {
@@ -162,7 +177,7 @@ const Apps = () => {
                   </span>
                   
                   <button
-                    onClick={() => handleDeploy(app.id)}
+                    onClick={() => handleDeployClick(app)}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white text-black hover:bg-gray-200 rounded-md text-xs font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg"
                   >
                     <Play size={12} fill="currentColor" />
@@ -174,6 +189,49 @@ const Apps = () => {
           </div>
         )}
       </div>
+
+      {/* ── Deploy App Modal ───────────────────────────────────────────── */}
+      {showDeployModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <motion.div
+            initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+            className="bg-[#0E0E0E] min-w-[320px] sm:min-w-[400px] border border-white/10 p-6 rounded-2xl shadow-2xl relative"
+          >
+            <h3 className="text-xl font-bold text-white mb-2">Configure Deployment</h3>
+            <p className="text-sm text-[#71717A] mb-6">Enter values for the required parameters to run <b>{showDeployModal.name}</b>.</p>
+            
+            <div className="space-y-4 text-left">
+              {showDeployModal.parameters.map((p, i) => (
+                <div key={i}>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#71717A] mb-1">{p.key}</label>
+                  <input 
+                    type="text" 
+                    value={deployParams[p.key] || ''}
+                    onChange={(e) => setDeployParams({...deployParams, [p.key]: e.target.value})}
+                    placeholder={`Value for ${p.key}...`}
+                    className="w-full bg-[#1A1A1A] border border-white/10 rounded-lg px-3 py-2 text-white outline-none focus:border-[#FF8A00]"
+                  />
+                </div>
+              ))}
+
+              <div className="flex justify-end pt-4 border-t border-white/10 gap-3 mt-6">
+                <button 
+                  onClick={() => setShowDeployModal(null)}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-[#71717A] hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => executeDeploy(showDeployModal.id, deployParams)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-white text-black hover:bg-gray-200"
+                >
+                  <Play size={14} fill="currentColor"/> Run App
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

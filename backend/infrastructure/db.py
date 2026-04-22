@@ -132,6 +132,8 @@ def run_schema_migrations():
                 cur.execute(TOOL_SCHEMA_MIGRATIONS)
                 # Migrate analytics: add cache tokens
                 cur.execute(ANALYTICS_SCHEMA_MIGRATIONS)
+                # Migrate predefined_workflows: add parameters
+                cur.execute("ALTER TABLE predefined_workflows ADD COLUMN IF NOT EXISTS parameters JSONB DEFAULT '[]'")
             conn.commit()
         logger.info("db_schema_ready")
     except Exception as e:
@@ -384,20 +386,23 @@ def update_thread_status(thread_id: str, status: str):
 
 # --- Apps (Predefined Workflows) CRUD ---
 
-def save_app(app_id: str, tenant_id: str, name: str, visual_layout: dict, synthesis_manifest: dict) -> bool:
+def save_app(app_id: str, tenant_id: str, name: str, visual_layout: dict, synthesis_manifest: dict, parameters: list = None) -> bool:
+    if parameters is None:
+        parameters = []
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("INSERT INTO tenants (id, name) VALUES (%s, 'Default Org') ON CONFLICT DO NOTHING", (tenant_id,))
                 cur.execute("""
-                    INSERT INTO predefined_workflows (id, tenant_id, name, visual_layout, synthesis_manifest, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, NOW())
+                    INSERT INTO predefined_workflows (id, tenant_id, name, visual_layout, synthesis_manifest, parameters, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (id) DO UPDATE SET
                         name = EXCLUDED.name,
                         visual_layout = EXCLUDED.visual_layout,
                         synthesis_manifest = EXCLUDED.synthesis_manifest,
+                        parameters = EXCLUDED.parameters,
                         updated_at = NOW()
-                """, (app_id, tenant_id, name, json.dumps(visual_layout), json.dumps(synthesis_manifest)))
+                """, (app_id, tenant_id, name, json.dumps(visual_layout), json.dumps(synthesis_manifest), json.dumps(parameters)))
             conn.commit()
             return True
     except Exception as e:
@@ -409,7 +414,7 @@ def get_apps(tenant_id: str = "tenant_1") -> list:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""
-                    SELECT id, name, visual_layout, synthesis_manifest, created_at, updated_at
+                    SELECT id, name, visual_layout, synthesis_manifest, parameters, created_at, updated_at
                     FROM predefined_workflows
                     WHERE tenant_id = %s
                     ORDER BY updated_at DESC

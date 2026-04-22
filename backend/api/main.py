@@ -37,7 +37,6 @@ from fastapi.staticfiles import StaticFiles
 
 from core.globals import state_manager, blackboard, active_workflow_tasks, registry
 from infrastructure import db
-from tools.agent_reach_tools import AGENT_REACH_TOOLS
 from tools.filesystem_tools import FILESYSTEM_TOOLS
 from tools.shell_tools import SHELL_TOOLS
 from tools.adapters import LangchainAdapter
@@ -51,13 +50,6 @@ tracer = get_tracer(__name__)
 
 def register_browser_tools(registry):
     search_tools = []
-    try:
-        for tool_info in AGENT_REACH_TOOLS:
-            registry.register(tool_info["name"], tool_info["func"], tool_info["schema"])
-            logger.info("tool_registered", tool=tool_info["name"], source="agent-reach")
-    except Exception as e:
-        logger.error("agent_reach_tools_failed", reason=str(e))
-
     try:
         for tool_info in FILESYSTEM_TOOLS:
             registry.register(tool_info["name"], tool_info["func"], tool_info["schema"])

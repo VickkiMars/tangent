@@ -20,10 +20,12 @@ class AppCreateRequest(BaseModel):
     name: str = Field(..., description="The user-friendly name of the app")
     visual_layout: Dict[str, Any] = Field(default_factory=dict, description="Visual structure of the DAG (ReactFlow state)")
     synthesis_manifest: Dict[str, Any] = Field(..., description="The synthesized manifest containing agent blueprints")
+    parameters: list = Field(default_factory=list, description="List of parameter definitions for parameterized apps")
 
 class AppRunRequest(BaseModel):
     provider: str = "google"
     model: str = "gemini-3.1-flash-lite-preview"
+    parameter_values: Dict[str, str] = Field(default_factory=dict, description="Values for the app parameters")
 
 @router.get("/")
 async def list_apps(user: dict = Depends(get_current_user)):
@@ -52,7 +54,8 @@ async def save_app(request: AppCreateRequest, user: dict = Depends(get_current_u
         tenant_id=tenant_id,
         name=request.name,
         visual_layout=request.visual_layout,
-        synthesis_manifest=request.synthesis_manifest
+        synthesis_manifest=request.synthesis_manifest,
+        parameters=request.parameters
     )
     
     if not success:
@@ -74,11 +77,19 @@ async def delete_app(app_id: str, user: dict = Depends(get_current_user)):
         
     return {"status": "deleted"}
 
-async def deploy_app_task(session_id: str, synthesis_manifest_data: dict, app_name: str, provider: str, model: str):
-    """Executes a pre-defined app without going through the MetaAgent."""
+async def deploy_app_task(session_id: str, synthesis_manifest_data: dict, app_name: str, provider: str, model: str, parameter_values: dict = None):
+    \"\"\"Executes a pre-defined app without going through the MetaAgent.\"\"\"
     try:
         logger.info("app_run_start", session_id=session_id, app_name=app_name)
         await state_manager.update_status(session_id, "architecting") # Briefly say architecting or preparing
+
+        # Interpolate variables before validating manifest
+        if parameter_values:
+            import json
+            manifest_str = json.dumps(synthesis_manifest_data)
+            for key, value in parameter_values.items():
+                manifest_str = manifest_str.replace(f"{{{{{key}}}}}", str(value))
+            synthesis_manifest_data = json.loads(manifest_str)
 
         # Reconstruct SynthesisManifest directly from saved DB dict
         manifest = SynthesisManifest.model_validate(synthesis_manifest_data)
@@ -168,14 +179,14 @@ async def run_app(app_id: str, request: AppRunRequest, user: dict = Depends(get_
     )
     await state_manager.save_state(initial_state)
 
-    # Spawn background task
     task = asyncio.create_task(
         deploy_app_task(
             session_id=session_id,
             synthesis_manifest_data=synthesis_manifest,
             app_name=app["name"],
             provider=request.provider,
-            model=request.model
+            model=request.model,
+            parameter_values=request.parameter_values
         )
     )
     active_workflow_tasks[session_id] = task

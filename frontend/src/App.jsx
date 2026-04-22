@@ -14,6 +14,7 @@ import Apps from './pages/Apps';
 import Auth from './pages/Auth';
 import MarketingScreenshot from './pages/MarketingScreenshot';
 import MarketingComplexGraph from './pages/MarketingComplexGraph';
+import MarketingMyApps from './pages/MarketingMyApps';
 import Notification from './components/Notification';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -23,25 +24,33 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <Layout>
-          <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
-          <Route path="/builder" element={<ProtectedRoute><Builder /></ProtectedRoute>} />
-          <Route path="/tasks" element={<ProtectedRoute><TaskView /></ProtectedRoute>} />
-          <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
-          <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
-          <Route path="/apps" element={<ProtectedRoute><Apps /></ProtectedRoute>} />
-          <Route path="/tools" element={<ProtectedRoute><ToolRepository /></ProtectedRoute>} />
+        <Routes>
+          {/* Naked Marketing Routes (No Layout) */}
+          <Route path="/screenshot/my-apps" element={<MarketingMyApps />} />
           <Route path="/marketing" element={<MarketingScreenshot />} />
           <Route path="/marketing-complex" element={<MarketingComplexGraph />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/docs" element={<Docs />} />
-          <Route path="/login" element={<Auth />} />
-          <Route path="/signup" element={<Auth />} />
+
+          {/* Standard App Routes (With Layout) */}
+          <Route path="/*" element={
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+                <Route path="/builder" element={<ProtectedRoute><Builder /></ProtectedRoute>} />
+                <Route path="/tasks" element={<ProtectedRoute><TaskView /></ProtectedRoute>} />
+                <Route path="/history" element={<ProtectedRoute><History /></ProtectedRoute>} />
+                <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+                <Route path="/apps" element={<ProtectedRoute><Apps /></ProtectedRoute>} />
+                <Route path="/tools" element={<ProtectedRoute><ToolRepository /></ProtectedRoute>} />
+                <Route path="/pricing" element={<Pricing />} />
+                <Route path="/docs" element={<Docs />} />
+                <Route path="/login" element={<Auth />} />
+                <Route path="/signup" element={<Auth />} />
+              </Routes>
+            </Layout>
+          } />
         </Routes>
         <Notification />
-      </Layout>
       </AuthProvider>
     </Router>
   );
