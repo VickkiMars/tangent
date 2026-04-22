@@ -11,4 +11,4 @@ temp_prompts.md
 claude-code-doc/
 __pycache__/
 *.pyc
-.pytest_cache/
+.pytest_cache//marketing/

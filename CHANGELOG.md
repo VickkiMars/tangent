@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `SaveAppModal` in `TaskBoard.jsx` allowing users to map prompt text to variable keys (e.g. `{{TOPIC}}`).
   - New `RunAppModal` in `Apps.jsx` to collect parameter values before deployment.
   - Backend interpolation engine in `apps.py` that injects user values into manifests before agent compilation.
+- **Marketing & Social**:
+  - Created a draft thread for X (Twitter) in `marketing/posts/` summarizing the My Apps launch.
+  - Reorganized `feat-desc` and `marketing` folders; moved internal marketing assets to an ignored `marketing/` directory.
 - **Premium Marketing Assets**:
   - `MarketingMyApps.jsx`: A high-end, 3-step interactive screenshot flow (Library -> Prompt -> Result).
   - Indigo-based eye-friendly design system for marketing screenshots.
