@@ -16,6 +16,8 @@ class AgentBlueprint(BaseModel):
     target_task_id: str = Field(description="The exact SubTask this agent is born to solve")
     agent_type: Literal["ephemeral", "daemon"] = Field(default="ephemeral", description="Type of the agent: ephemeral or daemon")
     persona_id: Optional[str] = Field(default=None, description="The fixed persona ID to use, if any")
+    parent_persona_id: Optional[str] = Field(default=None, description="The persona ID this was mutated from")
+    is_mutation: bool = Field(default=False, description="Whether this agent is a mutated version of parent_persona_id")
     persona_prompt: Optional[str] = Field(default=None, description="Highly specific instructions generated JIT for this task")
     injected_tools: List[str] = Field(description="Strictly bound functions for this ephemeral instance")
     temperature: float = Field(default=1.0, description="Task-specific creativity level")
@@ -131,3 +133,32 @@ class DeterministicWorkflowResponse(BaseModel):
     workflow_steps: List[Dict[str, Any]]
     execution_trace: List[Dict[str, Any]]
     final_context: Dict[str, Any]
+
+# 8. Agent Registry
+class PersonaPerformance(BaseModel):
+    success_rate: float
+    avg_task_duration_ms: int
+    total_runs: int
+
+class PersonaRecord(BaseModel):
+    id: str
+    title: str
+    description: str
+    prompt: str
+    tools: List[str]
+    tags: List[str]
+    performance: PersonaPerformance
+    last_used: str
+    created_by: str
+    version: int
+    parent_id: Optional[str] = None
+
+class PersonaQuery(BaseModel):
+    task_description: str
+    required_tools: List[str] = Field(default_factory=list)
+
+class PersonaMutationRequest(BaseModel):
+    base_persona_id: str
+    task_description: str
+    diff_instruction: str
+    required_tools: List[str] = Field(default_factory=list)

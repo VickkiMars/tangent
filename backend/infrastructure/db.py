@@ -115,6 +115,54 @@ CREATE TABLE IF NOT EXISTS query_optimizations (
     success_score DECIMAL(5, 2),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS personas (
+    id VARCHAR(255) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    version INTEGER DEFAULT 1,
+    parent_id VARCHAR(255) REFERENCES personas(id) ON DELETE SET NULL,
+    success_rate DECIMAL(5, 4) DEFAULT 0.0,
+    avg_task_duration_ms INTEGER DEFAULT 0,
+    total_runs INTEGER DEFAULT 0,
+    last_used TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by VARCHAR(255) DEFAULT 'meta_agent',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS persona_tools (
+    persona_id VARCHAR(255) REFERENCES personas(id) ON DELETE CASCADE,
+    tool_name VARCHAR(255) NOT NULL,
+    PRIMARY KEY (persona_id, tool_name)
+);
+CREATE TABLE IF NOT EXISTS persona_tags (
+    persona_id VARCHAR(255) REFERENCES personas(id) ON DELETE CASCADE,
+    tag VARCHAR(255) NOT NULL,
+    PRIMARY KEY (persona_id, tag)
+);
+CREATE TABLE IF NOT EXISTS persona_metrics (
+    id SERIAL PRIMARY KEY,
+    persona_id VARCHAR(255) REFERENCES personas(id) ON DELETE CASCADE,
+    run_id VARCHAR(255) NOT NULL,
+    success BOOLEAN NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS persona_lineage (
+    id SERIAL PRIMARY KEY,
+    parent_id VARCHAR(255) REFERENCES personas(id) ON DELETE CASCADE,
+    child_id VARCHAR(255) REFERENCES personas(id) ON DELETE CASCADE,
+    diff_summary TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS persona_run_log (
+    id SERIAL PRIMARY KEY,
+    run_id VARCHAR(255) NOT NULL,
+    persona_id VARCHAR(255) REFERENCES personas(id) ON DELETE SET NULL,
+    task TEXT NOT NULL,
+    result TEXT,
+    feedback TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 """
 
 def run_schema_migrations():
@@ -447,4 +495,132 @@ def delete_app(app_id: str) -> bool:
         logger.error("delete_app_error", error=str(e))
         return False
 
+
+# --- Persona Registry CRUD ---
+
+def save_persona(persona_id: str, title: str, description: str, prompt: str, 
+                 version: int = 1, parent_id: str = None, created_by: str = 'meta_agent',
+                 tools: list = None, tags: list = None) -> bool:
+    tools = tools or []
+    tags = tags or []
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO personas (id, title, description, prompt, version, parent_id, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        title = EXCLUDED.title,
+                        description = EXCLUDED.description,
+                        prompt = EXCLUDED.prompt,
+                        version = EXCLUDED.version,
+                        parent_id = EXCLUDED.parent_id,
+                        last_used = NOW()
+                """, (persona_id, title, description, prompt, version, parent_id, created_by))
+                
+                # Update tools
+                cur.execute("DELETE FROM persona_tools WHERE persona_id = %s", (persona_id,))
+                for tool in tools:
+                    cur.execute("INSERT INTO persona_tools (persona_id, tool_name) VALUES (%s, %s)", (persona_id, tool))
+                    
+                # Update tags
+                cur.execute("DELETE FROM persona_tags WHERE persona_id = %s", (persona_id,))
+                for tag in tags:
+                    cur.execute("INSERT INTO persona_tags (persona_id, tag) VALUES (%s, %s)", (persona_id, tag))
+            conn.commit()
+            return True
+    except Exception as e:
+        logger.error("save_persona_error", error=str(e))
+        return False
+
+def get_all_personas() -> list:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT p.*, 
+                           array_remove(array_agg(DISTINCT pt.tool_name), NULL) as tools,
+                           array_remove(array_agg(DISTINCT pg.tag), NULL) as tags
+                    FROM personas p
+                    LEFT JOIN persona_tools pt ON p.id = pt.persona_id
+                    LEFT JOIN persona_tags pg ON p.id = pg.persona_id
+                    GROUP BY p.id
+                """)
+                return [dict(r) for r in cur.fetchall()]
+    except Exception as e:
+        logger.error("get_all_personas_error", error=str(e))
+        return []
+
+def get_persona_by_id(persona_id: str) -> dict:
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT p.*, 
+                           array_remove(array_agg(DISTINCT pt.tool_name), NULL) as tools,
+                           array_remove(array_agg(DISTINCT pg.tag), NULL) as tags
+                    FROM personas p
+                    LEFT JOIN persona_tools pt ON p.id = pt.persona_id
+                    LEFT JOIN persona_tags pg ON p.id = pg.persona_id
+                    WHERE p.id = %s
+                    GROUP BY p.id
+                """, (persona_id,))
+                row = cur.fetchone()
+                return dict(row) if row else None
+    except Exception as e:
+        logger.error("get_persona_by_id_error", error=str(e))
+        return None
+
+def update_persona_last_used(persona_id: str):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE personas SET last_used = NOW() WHERE id = %s", (persona_id,))
+            conn.commit()
+    except Exception as e:
+        logger.error("update_persona_last_used_error", error=str(e))
+
+def record_persona_metric(persona_id: str, run_id: str, success: bool, duration_ms: int, task: str, result: str, feedback: str = None):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    INSERT INTO persona_metrics (persona_id, run_id, success, duration_ms)
+                    VALUES (%s, %s, %s, %s)
+                """, (persona_id, run_id, success, duration_ms))
+                
+                cur.execute("""
+                    INSERT INTO persona_run_log (run_id, persona_id, task, result, feedback)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (run_id, persona_id, task, result, feedback))
+                
+                # Recalculate averages
+                cur.execute("""
+                    UPDATE personas SET
+                        total_runs = total_runs + 1,
+                        success_rate = (
+                            SELECT CAST(SUM(CASE WHEN success THEN 1 ELSE 0 END) AS DECIMAL) / COUNT(*) 
+                            FROM persona_metrics WHERE persona_id = %s
+                        ),
+                        avg_task_duration_ms = (
+                            SELECT AVG(duration_ms) 
+                            FROM persona_metrics WHERE persona_id = %s AND success = TRUE
+                        )
+                    WHERE id = %s
+                """, (persona_id, persona_id, persona_id))
+            conn.commit()
+    except Exception as e:
+        logger.error("record_persona_metric_error", error=str(e))
+
+def record_persona_lineage(parent_id: str, child_id: str, diff_summary: str):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO persona_lineage (parent_id, child_id, diff_summary)
+                    VALUES (%s, %s, %s)
+                """, (parent_id, child_id, diff_summary))
+            conn.commit()
+    except Exception as e:
+        logger.error("record_persona_lineage_error", error=str(e))
 

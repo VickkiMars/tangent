@@ -597,6 +597,15 @@ class JITCompiler:
                             prompt_tokens, completion_tokens, cache_read_tokens, cache_creation_tokens, total_cost, tools_used, False, lifetime,
                             self._user_id, self._tenant_id
                         )
+                        
+                        # Post-Run Feedback Loop (FAILURE)
+                        from infrastructure.db import record_persona_metric
+                        if blueprint.persona_id:
+                            lifetime_ms = int(lifetime * 1000)
+                            await asyncio.to_thread(
+                                record_persona_metric,
+                                blueprint.persona_id, task.task_id, False, lifetime_ms, task.description, None, str(e)
+                            )
 
                         failure_message = A2AMessage(
                             message_id=f"msg_{agent_id}_{int(time.time())}",
@@ -630,6 +639,39 @@ class JITCompiler:
                 task.task_id, agent_id, task.task_id, getattr(blueprint, "provider", "openai"), getattr(blueprint, "model", "gpt-4o"),
                 prompt_tokens, completion_tokens, cache_read_tokens, cache_creation_tokens, total_cost, tools_used, True, lifetime,
                 self._user_id, self._tenant_id
+            )
+
+            # Post-Run Feedback Loop (SUCCESS)
+            from infrastructure.db import record_persona_metric, save_persona, record_persona_lineage
+            import uuid
+            
+            lifetime_ms = int(lifetime * 1000)
+            target_persona_id = blueprint.persona_id
+            
+            if not target_persona_id:
+                # SPAWN or MUTATE: register as a new persona
+                target_persona_id = str(uuid.uuid4())
+                await asyncio.to_thread(
+                    save_persona,
+                    target_persona_id,
+                    title=task.description[:50] + "...", 
+                    description=task.description,
+                    prompt=blueprint.persona_prompt or "Helpful autonomous agent.",
+                    version=1,
+                    parent_id=blueprint.parent_persona_id if blueprint.is_mutation else None,
+                    created_by="meta_agent",
+                    tools=blueprint.injected_tools,
+                    tags=["mutated" if blueprint.is_mutation else "spawned"]
+                )
+                if blueprint.is_mutation and blueprint.parent_persona_id:
+                    await asyncio.to_thread(
+                        record_persona_lineage,
+                        blueprint.parent_persona_id, target_persona_id, "Automatic mutation via meta agent"
+                    )
+
+            await asyncio.to_thread(
+                record_persona_metric,
+                target_persona_id, task.task_id, True, lifetime_ms, task.description, final_response_text, None
             )
 
             logger.info("agent_terminated", agent_id=agent_id, task_id=task.task_id, status="success")

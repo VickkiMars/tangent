@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Agent Registry & Reuse-First Spawning**:
+  - Implemented `personas`, `persona_metrics`, `persona_lineage` tables in `db.py` to store battle-tested agents.
+  - New `registry_search.py` module to execute Spawning Decision Tree (REUSE, MUTATE, SPAWN).
+  - Post-run feedback loop in `JITCompiler` to track success rates and organically register mutated/spawned agents.
+- **Documentation**:
+  - `tangent-docs/agent_registry.md` deep dive into the registry architecture.
+  - `tangent-docs/backend.md`, `tangent-docs/database.md`, `tangent-docs/frontend.md`, `tangent-docs/optimization.md` for comprehensive system documentation.
+  - Added marketing post `agent_registry_launch.md`.
 - **"My Apps" Parameterization**: Complete end-to-end framework for saving and running workflows with dynamic variables.
   - New `SaveAppModal` in `TaskBoard.jsx` allowing users to map prompt text to variable keys (e.g. `{{TOPIC}}`).
   - New `RunAppModal` in `Apps.jsx` to collect parameter values before deployment.
